@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets / credentials
+.env
+*.token
+credentials*.json
+cookies*.txt
+
+# Media artifacts & state
+data/
+workspace/
+*.mp4
+*.wav
+*.ass
+*.mov
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
