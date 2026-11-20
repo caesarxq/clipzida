@@ -22,10 +22,10 @@
 | D10 | Accounts | **ALL FRESH** — nothing exists yet | Account Factory runbook §5A is the critical path |
 
 **Remaining decisions (small, answer in chat):**
-1. **Brand name — NEEDS RE-CONFIRMATION.** Approved "Leonida Clips" is TAKEN on all 4 platforms (active GTA 6 clip squatters, incl. a TikTok "LeonidaClips" linked to @ViceCityHub); 9 alternatives also taken. **Recommendation: CLIPZIDA** (@clipzida) — coined "Clips + Leonida", verified AVAILABLE on YouTube/TikTok/IG/X + clipzida.com (2026-11-20, control-calibrated checks). Confirm to lock.
+1. **Brand name — LOCKED: CLIPZIDA** (@clipzida), confirmed by Mohamed 2026-11-20. Handles verified available on YouTube/TikTok/IG/X + clipzida.com; logo + banner in `assets/brand/`. (Original "Leonida Clips" was taken on all platforms by squatters.)
 2. Brand email + phone for signups (you create the Gmail; OTPs stay on your device — secrets go to the vault, never chat).
 3. Discord server: create one (or reuse existing) + invite me to set up the bot.
-4. VPS provider approval: Hetzner (~$17.80/mo, card payment by you).
+4. **VPS — Hetzner ruled out** (no card/PayPal route from Kenya). Recommendation: **Contabo Cloud VPS 10, €6.60/mo, paid with your Kenyan bank card** (§13A); $0 Oracle-free attempt in parallel; M-Pesa (Lineserve/Truehost) and crypto (PQ) fallbacks documented. Confirm to proceed to checkout.
 
 ---
 
@@ -307,12 +307,14 @@ Build order: **YouTube → X → Instagram → TikTok** (easiest autonomy first;
 - `#daily`: morning digest (pending, published yesterday, views, revenue estimate) mirrored from Hermes cron.
 - Bot token in vault; bot needs no public inbound port (gateway WebSocket) — works behind NAT.
 
-**VPS topology** (D5 = $30/mo):
-- Recommended: **Hetzner CPX31** — 4 vCPU AMD / 8GB RAM / 160GB NVMe, ~$17.80/mo.[87] Runs the ENTIRE pipeline 24/7: ingest, whisper-small (CPU int8), libx264 veryfast renders, scheduler, Discord bot, publishing. 160GB holds weeks of artifacts; cleanup job keeps <60%.
-- Budget alternative: CX32 (~$8.20/mo, 4GB[87][89]) with renders offloaded to the Mac — rejected as default: Mac sleep breaks autonomy; CPX31 keeps the loop closed. Verify live pricing at signup.[88]
+**VPS topology** (D5 = $30/mo; **Hetzner ruled out — no card/PayPal route from Kenya**):
+- **Primary: Contabo Cloud VPS 10** — 4 vCPU / 8GB / 100GB SSD, **€6.60/mo on monthly billing, no setup fee** (~$7.2).[99] Payment is location-independent: credit card, PayPal, Skrill (EUR); card/PayPal (USD) — a Kenyan bank Visa/Mastercard with international online payments enabled works; **no PayPal required**.[101][103] Runs the ENTIRE pipeline 24/7: ingest, whisper-small (CPU int8), libx264 veryfast renders, scheduler, Discord bot, publishing. Caveats: unmanaged, oversold CPU (fine for batch workloads), possible identity verification at signup, slow support — mitigate with nightly backups + rsync to Mac.
+- **$0 parallel option: Oracle Always Free ARM** — after the June 15, 2026 cut: **2 OCPU (real cores) / 12GB RAM / 200GB block / 10TB egress**, free forever; Frankfurt capacity provisions fast; card verification at signup.[115] Risks: idle reclamation (7-day p95 CPU/net/mem <20% → keepalive job required) and free-account termination risk → use as dev/backup box, not the sole production home.
+- **M-Pesa fallback (if all cards fail): Lineserve Nairobi (NBO1)** — unit pricing: 4vCPU/8GB/100GB = KSh 7,020 + VAT ≈ **$63/mo (over budget)**; 2vCPU/4GB/40GB ≈ $33/mo ($27 effective on annual prepay) — minimum viable, tight.[127] Truehost M-Pesa VPS is the other local option; 8GB-tier pricing unverified.[104][108]
+- **Crypto fallback: PQ Hosting** — cards + crypto (USDT fundable via Binance P2P M-Pesa), 17 countries.[119]
 - Mac = dev machine, dashboard fallback, optional render offload during marathons.
-- Provisioning: cloud-init + SSH key from vault; systemd units per worker; SQLite on the VPS (single writer); rsync artifacts to Mac on demand.
-- Budget allocation: VPS $17.80 + OpenRouter scoring ~$8 + brand domain ~$1.20 + buffer ~$3 = **$30**.
+- Provisioning: cloud-init + SSH key from vault; systemd units per worker; SQLite on the VPS (single writer); **nightly rsync of state + artifacts to Mac** (Contabo resilience).
+- Budget allocation: Contabo ~$7.2 + OpenRouter ~$8 + domain ~$1.2 + buffer ~$13 = **≤$30**.
 
 ## 14. Phase 8 — Analytics, campaign ledger, feedback (Day 11–14)
 
@@ -373,11 +375,12 @@ Global rules: no same-clip double-submission; re-cut per campaign; budgets deple
 
 | Item | Cost |
 |---|---|
-| Hetzner CPX31 VPS (4 vCPU/8GB/160GB), 24/7 pipeline[87] | ~$17.80/mo |
+| Contabo Cloud VPS 10 (4 vCPU/8GB/100GB), 24/7 pipeline[99][101] | ~$7.20/mo (€6.60) |
 | OpenRouter paid scoring (free models for dev/CI) | ~$5–8/mo |
-| Brand domain (.com, link-in-bio) | ~$1.20/mo amortized |
+| Brand domain clipzida.com | ~$1.20/mo amortized |
+| Oracle Always Free ARM (dev/backup, optional)[115] | $0 |
 | Twitch / Kick / YouTube / IG / X / TikTok APIs, Discord bot | $0 |
-| Buffer | ~$3/mo |
+| Buffer | ~$13/mo |
 | **Total** | **≤$30/mo** |
 
 ## 19. Test plan (TDD throughout)
@@ -445,11 +448,16 @@ Critical path: **P0.8 TikTok audit (external lead time)** and **P0.6/P0.7 accoun
 [76] https://support.google.com/youtube/answer/1311392?hl=en — YouTube channel monetization policies
 [77] https://support.google.com/youtube/community-guide/271248162/faq-reused-content-youtube — FAQ: Reused Content & YouTube's Partner Program - YouTube ...
 [81] https://dev.twitch.tv/docs/authentication/scopes — Twitch Access Token Scopes
-[87] https://cloudmart.dev/provider/hetzner — Hetzner pricing Nov 2026 (CloudMart)
-[88] https://usehcm.com/hetzner-pricing — Hetzner cloud pricing 2026
-[89] https://stackrates.ai/blog/hetzner-cloud-honest-review — Hetzner review 2026 plan prices
 [90] https://cut.pro/en/blog/how-to-warm-up-tiktok-account-2026 — TikTok new-account warmup 2026
 [91] https://www.tokportal.com/learn/warm-up-new-instagram-tiktok-account — TokPortal: IG/TikTok warmup
 [92] https://www.jem.social/blog/how-to-warm-up-tiktok-and-instagram-accounts — Jem Social: 14-day warmup plan
 [93] https://socialnexis.com/guides/twitter-automation-safe-2026 — SocialNexis: X automation limits 2026
 [95] https://www.tokportal.com/learn/tiktok-shadow-limits-new-accounts — TokPortal: TikTok shadow limits new accounts
+[99] https://webfin.org/contabo-pricing — Contabo Pricing (2026): Terms and Plans - WebFin
+[101] https://help.contabo.com/en/support/solutions/articles/103000269311-which-currencies-payment-methods-are-accepted-by-contabo- — Which currencies are accepted by Contabo?
+[103] https://evertry.co/blog/how-to-pay-for-contabo-in-uganda — How to Pay for Contabo in Uganda - EverTry
+[104] https://truehost.co.ke/managed-vps-plans-prices — Managed VPS Hosting Plans and Prices: What to Expect
+[108] https://www.lineserve.net/blog/cloud-providers-in-kenya — Cloud Providers in Kenya: Who Operates Locally (2026)
+[115] https://sudosecurity.org/hosting-on-oracle-cloud-free-tier — What You Can Self-Host on Oracle Cloud Free Tier (2026)
+[119] https://pq.hosting/en/choose-vps — Choose VPS/VDS Plans - Find Your Perfect Virtual Server
+[127] https://www.lineserve.co.ke/cloud-servers — Lineserve Nairobi cloud servers unit pricing
