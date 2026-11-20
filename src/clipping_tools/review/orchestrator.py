@@ -24,7 +24,8 @@ def render_path(conn: sqlite3.Connection, render_id: int) -> str | None:
 
 
 def run_cycle(db_path, *, ingest_fn=None, review_publish_fn=None,
-              render_fn=None, publish_fn=None) -> dict:
+              render_fn=None, publish_fn=None, gate_fn=None,
+              publish_platform: str = "youtube", publish_account: str | None = None) -> dict:
     """One autonomous pass. All stages injectable for testing.
 
     Order: ingest new clips -> post drafts to Discord -> render approved ->
@@ -45,8 +46,14 @@ def run_cycle(db_path, *, ingest_fn=None, review_publish_fn=None,
         conn = init_db(db_path)
         for post in rendered_unpublished(conn):
             path = render_path(conn, post["render_id"])
-            if path:
-                publish_fn(post["id"], db_path, path)
-                counts["published"] += 1
+            if not path:
+                continue
+            if gate_fn:
+                allowed, reason = gate_fn(conn, publish_platform, publish_account)
+                if not allowed:
+                    print(f"publish gate blocked post {post['id']}: {reason}")
+                    continue
+            publish_fn(post["id"], db_path, path)
+            counts["published"] += 1
         conn.close()
     return counts

@@ -77,6 +77,7 @@ def upload_to_youtube(post_id: int, db_path, video_path: str, *, transport=None,
     ext = str(data.get("id") or "")
     url = f"https://www.youtube.com/watch?v={ext}"
     with conn:
-        conn.execute("UPDATE posts SET external_post_id=?, url=?, status='published', published_at=? "
-                     "WHERE id=?", (ext, url, utcnow(), post_id))
+        conn.execute("UPDATE posts SET external_post_id=?, url=?, status='published', "
+                     "platform=?, published_at=? WHERE id=?",
+                     (ext, url, "youtube", utcnow(), post_id))
     return {"external_id": ext, "url": url, "privacy": "unlisted"}

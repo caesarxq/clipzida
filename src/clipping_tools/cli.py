@@ -235,9 +235,18 @@ def cycle() -> None:
     def _publish(post_id, db_path, path):
         from .publish.youtube import upload_to_youtube
         upload_to_youtube(post_id, db_path, path)
+        from .db import init_db as _init_db
+        from .review.warmup import record_publish
+        record_publish(_init_db(db_path), "youtube", os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
+
+    def _gate(conn, platform, account):
+        from .review.warmup import can_publish
+        return can_publish(conn, platform, account)
 
     result = run_cycle(ROOT / "data/state.db", ingest_fn=_ingest,
-                       review_publish_fn=_review_publish, render_fn=_render, publish_fn=_publish)
+                       review_publish_fn=_review_publish, render_fn=_render,
+                       publish_fn=_publish, gate_fn=_gate,
+                       publish_account=os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
     typer.echo(f"CYCLE_OK rendered={result['rendered']} published={result['published']}")
 
 

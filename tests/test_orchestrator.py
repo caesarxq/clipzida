@@ -50,6 +50,21 @@ def test_run_cycle_renders_only_approved_and_publishes_only_rendered():
     assert result == {"rendered": 1, "published": 1}
 
 
+def test_run_cycle_skips_publish_when_gate_blocks():
+    db = _seed()
+    conn = init_db(db)
+    conn.execute("INSERT INTO posts(id,render_id,caption,status,idempotency_key) "
+                 "VALUES(4,9,'D','rendered','clip-4')")
+    conn.commit(); conn.close()
+    published = []
+    result = run_cycle(db, ingest_fn=lambda: None, review_publish_fn=lambda: None,
+                       render_fn=lambda *a: None,
+                       publish_fn=lambda pid, dbp, path: published.append(pid),
+                       gate_fn=lambda conn, platform, account: (False, "cap reached"))
+    assert published == []
+    assert result["published"] == 0
+
+
 def test_run_cycle_is_idempotent_when_nothing_to_do():
     db = _seed()
     conn = init_db(db)
