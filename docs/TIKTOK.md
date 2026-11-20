@@ -39,7 +39,8 @@ that; it is the gate, not a formality.
    - **App name:** `CLIPZIDA`
    - **Category:** pick the closest (e.g. *Social* / *Tools*)
    - **Description:** shown on the authorization page — e.g. *"Posts licensed GTA 6 clip drafts to your TikTok inbox."*
-   - **Platforms:** Web and/or Desktop
+   - **Platforms:** **Desktop** (loopback redirect, PKCE — simplest for a VPS/CLI pipeline).
+     Choose Web only if you are verifying a domain.
 
 ## 3. Add products
 
@@ -48,19 +49,13 @@ that; it is the gate, not a formality.
 - **Content Posting API** — needed to send the video draft.
 
 ### Login Kit settings
-- Set a **Redirect URI**. TikTok requires an **absolute `https` URL**, static, no query
-  string, no `#`, max 10 URIs, <512 chars. The request's `redirect_uri` must match exactly.
-
-**Recommended for a personal/CLI setup (no domain yet):** use a free HTTPS tunnel:
-```bash
-# install once: brew install cloudflare/cloudflare/cloudflared
-cloudflared tunnel --url http://localhost:8899
-# prints: https://<random>.trycloudflare.com  → register that + /callback
-```
-Then the redirect URI is `https://<random>.trycloudflare.com/callback`.
-
-**If you own a domain** (e.g. `clipzida.com`): verify it (step 5) and use
-`https://clipzida.com/auth/tiktok/callback` — permanent, no tunnel needed.
+- Set a **Redirect URI**. Rules depend on the **platform type**:
+  - **Desktop** (recommended for this pipeline): loopback only — `http://localhost:<port>/callback/`
+    or `http://127.0.0.1:<port>/callback/`; a port is required; wildcard `*` is allowed; **`http` is fine**.
+  - **Web**: absolute `https`, static, no query/fragment, and under a domain you **verify** in URL properties.
+- **Use Desktop + `http://127.0.0.1:*/callback/`** unless you are registering and verifying a domain.
+- Desktop **requires PKCE** — the authorize URL carries `code_challenge` + `code_challenge_method=S256`
+  (hex-encoded SHA-256 of a per-attempt `code_verifier`), and the exchange sends the verifier.
 
 ## 4. Add scopes
 
