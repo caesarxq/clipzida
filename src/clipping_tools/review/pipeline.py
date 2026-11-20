@@ -25,6 +25,6 @@ def create_drafts_for_pending_clips(conn: sqlite3.Connection) -> int:
 
 def pending_posts(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute(
-        "SELECT id, render_id, caption, status, campaign_id, platform FROM posts "
+        "SELECT id, render_id, caption, status, campaign_id, platform, review_message_id FROM posts "
         "WHERE status='pending' ORDER BY id"
     ).fetchall()]

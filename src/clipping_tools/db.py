@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS renders(id INTEGER PRIMARY KEY, clip_id INTEGER, vari
 CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, render_id INTEGER, campaign_id INTEGER, platform TEXT,
   account TEXT, caption TEXT, hashtags TEXT, status TEXT,
   scheduled_at TEXT, published_at TEXT, external_post_id TEXT, url TEXT,
-  idempotency_key TEXT UNIQUE, error TEXT);
+  idempotency_key TEXT UNIQUE, review_message_id TEXT, error TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, post_id INTEGER, decision TEXT, reviewer TEXT,
   edits_json TEXT, decided_at TEXT);
 CREATE TABLE IF NOT EXISTS metrics(post_id INTEGER, fetched_at TEXT, views INTEGER, likes INTEGER,
@@ -58,6 +58,10 @@ def init_db(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    # Lightweight migration: add columns introduced after first deploy.
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(posts)")}
+    if "review_message_id" not in existing:
+        conn.execute("ALTER TABLE posts ADD COLUMN review_message_id TEXT")
     return conn
 
 
