@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS analysis(clip_id INTEGER PRIMARY KEY, transcript_json
 CREATE TABLE IF NOT EXISTS renders(id INTEGER PRIMARY KEY, clip_id INTEGER, variant TEXT, path TEXT,
   spec_json TEXT, checksum TEXT, rendered_at TEXT, UNIQUE(clip_id, variant));
 CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, render_id INTEGER, campaign_id INTEGER, platform TEXT,
-  account TEXT, caption TEXT, hashtags TEXT, status TEXT,
+  account TEXT, caption TEXT, hashtags TEXT, status TEXT, angle TEXT,
   scheduled_at TEXT, published_at TEXT, external_post_id TEXT, url TEXT,
   idempotency_key TEXT UNIQUE, review_message_id TEXT, error TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, post_id INTEGER, decision TEXT, reviewer TEXT,
@@ -62,6 +62,8 @@ def init_db(path: str | Path) -> sqlite3.Connection:
     existing = {r[1] for r in conn.execute("PRAGMA table_info(posts)")}
     if "review_message_id" not in existing:
         conn.execute("ALTER TABLE posts ADD COLUMN review_message_id TEXT")
+    if "angle" not in existing:
+        conn.execute("ALTER TABLE posts ADD COLUMN angle TEXT")
     return conn
 
 

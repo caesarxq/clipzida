@@ -13,7 +13,7 @@ def build_review_embed(post: dict) -> discord.Embed:
         description=(
             f"Campaign: {post.get('campaign', '—')}\n"
             f"Score: {post.get('score', 0)}\n"
-            f"Angle: {post.get('angle', '—')} | streamer: {post.get('broadcaster', '—')}"
+            f"Angle: {post.get('angle') or 'review'} | streamer: {post.get('broadcaster', '—')}"
         ),
         color=discord.Color.blurple(),
     )

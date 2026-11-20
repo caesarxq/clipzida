@@ -13,11 +13,13 @@ def create_drafts_for_pending_clips(conn: sqlite3.Connection) -> int:
         "  SELECT 1 FROM posts p WHERE p.idempotency_key = 'clip-' || c.id"
         ")"
     ).fetchall()
+    from .angles import classify_angle
     for row in rows:
         conn.execute(
-            "INSERT INTO posts(render_id, caption, status, idempotency_key) "
-            "VALUES(NULL, ?, 'pending', ?)",
-            (row["title"] or f"Clip #{row['id']}", f"clip-{row['id']}"),
+            "INSERT INTO posts(render_id, caption, status, angle, idempotency_key) "
+            "VALUES(NULL, ?, 'pending', ?, ?)",
+            (row["title"] or f"Clip #{row['id']}", classify_angle(row["title"] or ""),
+             f"clip-{row['id']}"),
         )
     conn.commit()
     return len(rows)
@@ -25,6 +27,6 @@ def create_drafts_for_pending_clips(conn: sqlite3.Connection) -> int:
 
 def pending_posts(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute(
-        "SELECT id, render_id, caption, status, campaign_id, platform, review_message_id FROM posts "
+        "SELECT id, render_id, caption, status, campaign_id, platform, review_message_id, angle FROM posts "
         "WHERE status='pending' ORDER BY id"
     ).fetchall()]
