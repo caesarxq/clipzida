@@ -49,6 +49,10 @@ class ReviewView(discord.ui.View):
         self.post_id = post_id
         self.reviewer_role = reviewer_role
         self.db_path = db_path
+        # Per-post custom_ids prevent a restart from routing old buttons to the wrong draft.
+        self.approve.custom_id = f"clipzida:approve:{post_id}"
+        self.reject.custom_id = f"clipzida:reject:{post_id}"
+        self.edit.custom_id = f"clipzida:edit:{post_id}"
 
     def _allowed(self, interaction: discord.Interaction) -> bool:
         roles = [str(r.id) for r in getattr(interaction.user, "roles", [])]
@@ -113,7 +117,12 @@ def make_bot() -> discord.Client:
     @client.event
     async def on_ready():
         await tree.sync()
-        print(f"CLIPZIDA bot ready: {client.user} in {len(client.guilds)} guild(s)")
+        print(f"CLIPZIDA bot ready: {client.user} in {len(client.guilds)} guild(s)", flush=True)
+        channel_id = os.environ.get("DISCORD_REVIEW_CHANNEL_ID", "")
+        if channel_id:
+            from .publisher import publish_pending_reviews
+            n = await publish_pending_reviews(client, _DB_PATH, channel_id, _REVIEWER_ROLE)
+            print(f"Published {n} review embed(s)", flush=True)
 
     return client
 

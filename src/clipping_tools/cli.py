@@ -151,5 +151,33 @@ def review_selftest() -> None:
     typer.echo("REVIEW_SELFTEST_OK")
 
 
+@app.command()
+def review_publish() -> None:
+    """Post pending drafts to Discord #clip-review as embeds with buttons."""
+    import asyncio
+    import discord
+    from .db import init_db
+    from .review.publisher import publish_pending_reviews
+    from .review.pipeline import create_drafts_for_pending_clips, pending_posts
+
+    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    channel_id = os.environ.get("DISCORD_REVIEW_CHANNEL_ID", "")
+    role = os.environ.get("DISCORD_REVIEWER_ROLE_ID", "")
+    if not (token and channel_id):
+        raise typer.Exit("DISCORD_BOT_TOKEN / DISCORD_REVIEW_CHANNEL_ID not set")
+    conn = init_db(ROOT / "data/state.db")
+    n = create_drafts_for_pending_clips(conn)
+    posts = pending_posts(conn)
+    conn.close()
+    typer.echo(f"created {n} draft(s), {len(posts)} pending")
+
+    async def _send() -> None:
+        async with discord.Client(intents=discord.Intents.default()) as client:
+            await client.login(token)
+            await publish_pending_reviews(client, ROOT / "data/state.db", channel_id, role)
+    asyncio.run(_send())
+    typer.echo("REVIEW_PUBLISH_DONE")
+
+
 if __name__ == "__main__":
     app()
