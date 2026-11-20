@@ -232,21 +232,28 @@ def cycle() -> None:
         from .review.render import render_post
         render_post(post_id, db_path)
 
-    def _publish(post_id, db_path, path):
-        from .publish.youtube import upload_to_youtube
-        upload_to_youtube(post_id, db_path, path)
+    def _publish(post_id, db_path, path, platform):
+        if platform == "tiktok":
+            from .publish.tiktok import publish_to_tiktok
+            publish_to_tiktok(post_id, db_path, path)
+        else:
+            from .publish.youtube import upload_to_youtube
+            upload_to_youtube(post_id, db_path, path)
         from .db import init_db as _init_db
         from .review.warmup import record_publish
-        record_publish(_init_db(db_path), "youtube", os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
+        record_publish(_init_db(db_path), platform, os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
 
     def _gate(conn, platform, account):
         from .review.warmup import can_publish
         return can_publish(conn, platform, account)
 
+    import yaml
+    targets = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text()).get("publish", {}).get("targets", ["youtube"])
     result = run_cycle(ROOT / "data/state.db", ingest_fn=_ingest,
                        review_publish_fn=_review_publish, render_fn=_render,
                        publish_fn=_publish, gate_fn=_gate,
-                       publish_account=os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
+                       publish_account=os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None,
+                       targets=targets)
     typer.echo(f"CYCLE_OK rendered={result['rendered']} published={result['published']}")
 
 

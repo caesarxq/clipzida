@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, render_id INTEGER, camp
   account TEXT, caption TEXT, hashtags TEXT, status TEXT, angle TEXT,
   scheduled_at TEXT, published_at TEXT, external_post_id TEXT, url TEXT,
   idempotency_key TEXT UNIQUE, review_message_id TEXT, error TEXT);
+CREATE TABLE IF NOT EXISTS post_platforms(id INTEGER PRIMARY KEY, post_id INTEGER, platform TEXT,
+  status TEXT, external_id TEXT, url TEXT, published_at TEXT, UNIQUE(post_id, platform));
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, post_id INTEGER, decision TEXT, reviewer TEXT,
   edits_json TEXT, decided_at TEXT);
 CREATE TABLE IF NOT EXISTS metrics(post_id INTEGER, fetched_at TEXT, views INTEGER, likes INTEGER,

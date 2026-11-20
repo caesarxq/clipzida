@@ -25,7 +25,8 @@ def render_path(conn: sqlite3.Connection, render_id: int) -> str | None:
 
 def run_cycle(db_path, *, ingest_fn=None, review_publish_fn=None,
               render_fn=None, publish_fn=None, gate_fn=None,
-              publish_platform: str = "youtube", publish_account: str | None = None) -> dict:
+              publish_platform: str = "youtube", publish_account: str | None = None,
+              targets: list[str] | None = None) -> dict:
     """One autonomous pass. All stages injectable for testing.
 
     Order: ingest new clips -> post drafts to Discord -> render approved ->
@@ -43,17 +44,24 @@ def run_cycle(db_path, *, ingest_fn=None, review_publish_fn=None,
             counts["rendered"] += 1
     conn.close()
     if publish_fn:
+        platforms = targets or [publish_platform]
         conn = init_db(db_path)
         for post in rendered_unpublished(conn):
             path = render_path(conn, post["render_id"])
             if not path:
                 continue
-            if gate_fn:
-                allowed, reason = gate_fn(conn, publish_platform, publish_account)
-                if not allowed:
-                    print(f"publish gate blocked post {post['id']}: {reason}")
+            for platform in platforms:
+                already = conn.execute(
+                    "SELECT 1 FROM post_platforms WHERE post_id=? AND platform=? AND status='published'",
+                    (post["id"], platform)).fetchone()
+                if already:
                     continue
-            publish_fn(post["id"], db_path, path)
-            counts["published"] += 1
+                if gate_fn:
+                    allowed, reason = gate_fn(conn, platform, publish_account)
+                    if not allowed:
+                        print(f"publish gate blocked post {post['id']} on {platform}: {reason}")
+                        continue
+                publish_fn(post["id"], db_path, path, platform)
+                counts["published"] += 1
         conn.close()
     return counts

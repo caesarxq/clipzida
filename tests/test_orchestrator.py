@@ -33,7 +33,7 @@ def test_run_cycle_renders_only_approved_and_publishes_only_rendered():
         conn.commit(); conn.close()
         return {}
 
-    def fake_publish(post_id, db_path, video_path):
+    def fake_publish(post_id, db_path, path, platform="youtube"):
         calls["published"].append(post_id)
         conn = init_db(db_path)
         conn.execute("UPDATE posts SET status='published' WHERE id=?", (post_id,))
