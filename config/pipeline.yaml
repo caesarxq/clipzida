@@ -1,0 +1,40 @@
+# Pipeline stage config — declarative, editable without code changes (plan §2).
+autonomy: queue   # queue | hybrid | auto  (graduation per P7.4)
+graduation:
+  min_days: 14
+  min_approved_posts: 50
+  max_strikes: 0
+  min_unchanged_approval_rate: 0.90
+  min_account_age_days: 14
+
+ingest:
+  twitch:
+    cadence_minutes: 10
+    window_hours: 24
+    max_pages: 5
+    category_query: "Grand Theft Auto VI"
+
+prefilter:
+  min_duration: 8
+  max_duration: 60
+  languages: [en]
+  score_threshold: 0.35
+
+selection:
+  target_min_seconds: 18
+  target_max_seconds: 45
+  hook_window_seconds: 2
+  angles: [funny, hype, news]
+
+render:
+  layout: gaming-split
+  style: classic
+  loudnorm: {I: -14, TP: -1.5, LRA: 11}
+  encoder: h264_videotoolbox
+  fallback_encoder: libx264
+  max_concurrent_jobs: 1
+
+publish:
+  slots: {start: "12:00", end: "23:00", tz: "Africa/Nairobi"}
+  jitter_minutes: 7
+  launch_wave_mode: asap

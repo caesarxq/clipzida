@@ -1,0 +1,28 @@
+# Per-platform caps + fresh-account warmup ramp (plan §5B, §12).
+# warmup = daily post cap by week since account creation (week1, week2, week3+).
+youtube:
+  daily_quota_units: 10000
+  upload_cost: 1600
+  search_cost: 100
+  max_uploads_per_day: 5
+  upload_pause_at_units: 8400
+  warmup: [3, 4, 5]
+tiktok:
+  requests_per_minute_per_token: 6
+  mode: inbox            # inbox (video.upload) until audit clears -> direct (video.publish)
+  caption_max_chars: 2200
+  warmup: [1, 2, 3]
+instagram:
+  posts_per_24h: 100
+  planned_per_day: 3
+  container_poll: {interval_seconds: 60, max_minutes: 5}
+  warmup: [1, 2, 3]
+x:
+  posts_per_month: 500
+  reads_per_month: 100
+  planned_per_day: 4
+  metrics_cadence: weekly
+  warmup: [2, 3, 5]
+facebook:
+  enabled: false
+  warmup: [1, 2, 3]

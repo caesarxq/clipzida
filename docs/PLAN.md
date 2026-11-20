@@ -22,7 +22,7 @@
 | D10 | Accounts | **ALL FRESH** — nothing exists yet | Account Factory runbook §5A is the critical path |
 
 **Remaining decisions (small, answer in chat):**
-1. **Brand name** — my recommendation: **Leonida Clips** (@leonidaclips). Alternatives: Vice City Viral (@vicecityviral), Neon Six (@neonsix). Leonida = GTA 6's state; niche-clear, brandable, survives beyond launch hype. I'll availability-check handles on all platforms once you pick (or say "you choose").
+1. **Brand name — NEEDS RE-CONFIRMATION.** Approved "Leonida Clips" is TAKEN on all 4 platforms (active GTA 6 clip squatters, incl. a TikTok "LeonidaClips" linked to @ViceCityHub); 9 alternatives also taken. **Recommendation: CLIPZIDA** (@clipzida) — coined "Clips + Leonida", verified AVAILABLE on YouTube/TikTok/IG/X + clipzida.com (2026-11-20, control-calibrated checks). Confirm to lock.
 2. Brand email + phone for signups (you create the Gmail; OTPs stay on your device — secrets go to the vault, never chat).
 3. Discord server: create one (or reuse existing) + invite me to set up the bot.
 4. VPS provider approval: Hetzner (~$17.80/mo, card payment by you).
@@ -334,21 +334,22 @@ Build order: **YouTube → X → Instagram → TikTok** (easiest autonomy first;
 - P9.6 VPS migration option (D5): ingest/scheduler/posting on $6 VPS; Mac renders on demand; artifact sync via rsync/R2.
 - P9.7 Multi-account fan pages (campaigns requiring dedicated accounts, e.g., Lauren Hamden) with per-account token isolation.[72]
 
-## 16. Campaign registry seed (snapshot Nov 18, 2026 — re-verify at P2.6)
+## 16. Campaign registry — LIVE status 2026-11-20 (machine-readable: `config/campaigns.yaml`)
 
-| Campaign | Model | Pay | Platforms | Entry bar | Critical rules |
-|---|---|---|---|---|---|
-| Tokyo Girl (Placements) | per-view | $0.70/1k, $2–$35/clip, $2k budget | TikTok, IG | none | use "Tokyo Girl" by Passive; music promo, not Rockstar-run |
-| Ruckus / Dasgasd3m | per-view | $1.00/1k, $10–$100, $1k budget | TikTok, YTS | GTA 6-posting account | funny moments focus |
-| TOMO (Clipping Nation) | per-view | $1.50/1k, $3.50–$150, $1k budget | TikTok, IG, YTS | none | streams + his YouTube videos |
-| LACY marathon (Reach) | pool | $12,500 | per rules page | 1M approved views | Lacy main focus; caption name + #LACY |
-| Clix marathon (Reach) | pool | $5,000 | TikTok, IG, YTS, X | 400k approved views | #Clix; **no AI-generated videos** |
-| Kai Cenat (Clipped & Shipped) | pool | $10,000 | TikTok, YTS, IG, X | 750k approved views; clip ≥1k views | Kai main focus |
-| YourRAGE (Reach) | pool | $5,000 | TikTok, IG, YTS | 500k approved views | marathon window |
-| Lauren Hamden (Reach) | per-view | $1.50/1k, $15–$250, $5k budget | TikTok, IG | **dedicated account** | her Twitch streams only |
+| Campaign | Model | Pay (live) | Budget left | Platforms | Status | Notes |
+|---|---|---|---|---|---|---|
+| Ruckus / Dasgasd3m | per-view | **$2.00/1k**, $20–150/clip | **$805** | TikTok, YTS | accepting | rate DOUBLED since Nov 18; GTA 6-specific account required |
+| Lauren Hamden (Reach) | per-view | $1.50/1k, $15–250/clip | **$4,332** | TikTok, IG | accepting | **dedicated account**; rules: reachclipping.com/Sisters |
+| YourRAGE pool (Reach) | pool | $5,000 | pool | all 4 | accepting | **0 clippers so far** — early-mover advantage |
+| Kai Cenat pool (C&S) | pool | $10,000 | pool | all 4 | accepting | 96 clippers; clip needs ≥1k views |
+| LACY pool (Reach) | pool | $12,500 | pool | all 4 | accepting | 427 clippers — crowded; caption name + #LACY |
+| Clix pool (Reach) | pool | $5,000 | pool | all 4 | accepting | 340 clippers; #Clix; **no AI-generated videos** |
+| TOMO (Clipping Nation) | per-view | $1.50/1k | **$0** | — | **paused/depleted** | died <48h after launch — validates daily budget sync (P2.6) |
+| Tokyo Girl (Placements) | per-view | $0.70/1k | unverified | TikTok, IG | re-check | music promo ("Tokyo Girl" by Passive) |
 
-Source: Content Rewards GTA 6 campaign roundup (8 of 11 campaigns detailed; pull full list at seed).[72][74]
+Live source: individual contentrewards.com campaign pages, fetched 2026-11-20; launch-week snapshot context.[72][74]
 Global rules: no same-clip double-submission; re-cut per campaign; budgets deplete; pools pay at marathon end; Rockstar policy applies on top.[72][14]
+**Join order:** Ruckus (best rate) → Lauren Hamden (deepest budget, needs dedicated account) → YourRAGE pool (zero competition). Pools are secondary until per-view revenue flows.
 
 ## 17. Risk register
 
