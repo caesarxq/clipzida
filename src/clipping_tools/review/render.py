@@ -61,12 +61,26 @@ def extract_wav(src: Path, wav: Path) -> None:
 def transcribe(wav: Path) -> list[dict]:
     from faster_whisper import WhisperModel
     model = WhisperModel("small", device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(str(wav), word_timestamps=True, language="en")
-    words = []
-    for seg in segments:
-        for w in seg.words or []:
-            words.append({"word": w.word.strip(), "start": round(w.start, 2), "end": round(w.end, 2)})
-    return words
+    # Word-level alignment can crash on some audio (IndexError in find_alignment).
+    # Fall back to segment-level timestamps so the render never hard-fails.
+    for word_timestamps in (True, False):
+        try:
+            segments, _ = model.transcribe(str(wav), word_timestamps=word_timestamps, language="en")
+            segments = list(segments)  # materialize; alignment may fail during iteration
+            words: list[dict] = []
+            for seg in segments:
+                if word_timestamps and seg.words:
+                    for w in seg.words:
+                        words.append({"word": w.word.strip(), "start": round(w.start, 2),
+                                      "end": round(w.end, 2)})
+                elif seg.text and seg.text.strip():
+                    words.append({"word": seg.text.strip(), "start": round(seg.start, 2),
+                                  "end": round(seg.end, 2)})
+            if words:
+                return words
+        except (IndexError, ValueError, RuntimeError):
+            continue
+    return []
 
 
 def energy_peaks(wav: Path) -> list[dict]:
