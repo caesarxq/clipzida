@@ -101,5 +101,31 @@ def campaigns() -> None:
         typer.echo(f"{c['status']:10s} {c['name']:38s} {c.get('pay_summary','')}")
 
 
+@app.command()
+def review_bot() -> None:
+    """Run the Discord review bot (foreground; systemd runs it as a service)."""
+    from .review.bot import run
+    run()
+
+
+@app.command()
+def review_selftest() -> None:
+    """Post a test embed to #clip-review and verify a reviewer decision round-trip."""
+    from .review.bot import decide
+    from .db import init_db
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as d:
+        conn = init_db(os.path.join(d, "state.db"))
+        conn.execute("INSERT INTO sources(id,platform,external_id,name) VALUES(1,'twitch','s','s')")
+        conn.execute("INSERT INTO clips_raw(id,source_id,external_id,url,title,created_at,status) "
+                     "VALUES(1,1,'c','u','t','2026-01-01T00:00:00+00:00','new')")
+        conn.execute("INSERT INTO renders(id,clip_id,variant,path) VALUES(1,1,'v','v.mp4')")
+        conn.execute("INSERT INTO posts(id,render_id,caption,status) VALUES(1,1,'SELFTEST','pending')")
+        conn.commit()
+        assert decide(["reviewer-role"], "reviewer-role", "approve", 1, "selftest", conn=conn) == "approved"
+        assert conn.execute("SELECT status FROM posts WHERE id=1").fetchone()[0] == "approved"
+    typer.echo("REVIEW_SELFTEST_OK")
+
+
 if __name__ == "__main__":
     app()

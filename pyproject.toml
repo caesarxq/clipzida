@@ -3,6 +3,7 @@ name = "clipping-tools"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "discord-py>=2.4",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "numpy>=2.4.6",
