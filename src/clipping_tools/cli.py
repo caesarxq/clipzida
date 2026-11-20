@@ -187,5 +187,59 @@ def review_publish() -> None:
     typer.echo("REVIEW_PUBLISH_DONE")
 
 
+@app.command()
+def cycle() -> None:
+    """Run one autonomous pipeline pass (ingest -> review -> render -> publish)."""
+    import asyncio
+    from .review.orchestrator import run_cycle
+
+    def _ingest():
+        asyncio.run(_ingest_async())
+
+    async def _ingest_async() -> None:
+        from datetime import datetime, timedelta, timezone
+        from .sources.twitch import TwitchClient
+        client = TwitchClient()
+        if not await client.health():
+            raise typer.Exit("Twitch auth failed")
+        since = datetime.now(timezone.utc) - timedelta(hours=24)
+        clips = await client.fetch_candidates(since)
+        import yaml
+        cfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text())
+        threshold = float(cfg.get("prefilter", {}).get("score_threshold", 0.35))
+        camp = yaml.safe_load((ROOT / "config/campaigns.yaml").read_text())
+        from .ingest_policy import licensed_from_campaigns
+        licensed = licensed_from_campaigns(camp.get("campaigns", []))
+        _persist_candidates(ROOT / "data/state.db", clips, threshold, dry_run=False, licensed=licensed)
+        typer.echo(f"ingest: {len(clips)} fetched")
+
+    def _review_publish():
+        asyncio.run(_review_publish_async())
+
+    async def _review_publish_async() -> None:
+        import discord
+        from .review.publisher import publish_pending_reviews
+        token = os.environ.get("DISCORD_BOT_TOKEN", "")
+        channel_id = os.environ.get("DISCORD_REVIEW_CHANNEL_ID", "")
+        role = os.environ.get("DISCORD_REVIEWER_ROLE_ID", "")
+        if not (token and channel_id):
+            return
+        async with discord.Client(intents=discord.Intents.default()) as client:
+            await client.login(token)
+            await publish_pending_reviews(client, ROOT / "data/state.db", channel_id, role)
+
+    def _render(post_id, db_path):
+        from .review.render import render_post
+        render_post(post_id, db_path)
+
+    def _publish(post_id, db_path, path):
+        from .publish.youtube import upload_to_youtube
+        upload_to_youtube(post_id, db_path, path)
+
+    result = run_cycle(ROOT / "data/state.db", ingest_fn=_ingest,
+                       review_publish_fn=_review_publish, render_fn=_render, publish_fn=_publish)
+    typer.echo(f"CYCLE_OK rendered={result['rendered']} published={result['published']}")
+
+
 if __name__ == "__main__":
     app()

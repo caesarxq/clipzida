@@ -1,0 +1,12 @@
+[Unit]
+Description=CLIPZIDA pipeline cycle (ingest -> review -> render -> publish)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=clipzida
+Group=clipzida
+WorkingDirectory=/home/clipzida/clipping_tools
+EnvironmentFile=/home/clipzida/clipping_tools/.env
+Environment=CLIPZIDA_DB=/home/clipzida/clipping_tools/data/state.db
+ExecStart=/usr/bin/flock -n /tmp/clipzida-cycle.lock /home/clipzida/.local/bin/uv run clipping-tools cycle
