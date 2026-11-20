@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from ..db import utcnow
+from .proxy import make_proxy
 
 WORK = Path(os.environ.get("CLIPZIDA_RENDER_DIR", "data/renders"))
 WORK.mkdir(parents=True, exist_ok=True)
@@ -180,6 +181,7 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
     hook = (words[0]["word"] if words else clip["title"] or "GTA 6 MOMENT")[:24].upper()
     make_ass(words, ass)
     info = render(src, out, ass, hook)
+    proxy_path = make_proxy(out)
     with conn:
         cur = conn.execute(
             "INSERT INTO renders(clip_id, variant, path, spec_json, checksum, rendered_at) "
@@ -190,7 +192,8 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
         )
         render_id = cur.lastrowid
         conn.execute("UPDATE posts SET render_id=?, status='rendered' WHERE id=?", (render_id, post_id))
-    return {"post_id": post_id, "render_id": render_id, "path": str(out), "probe": info}
+    return {"post_id": post_id, "render_id": render_id, "path": str(out),
+            "proxy_path": str(proxy_path) if proxy_path else None, "probe": info}
 
 
 def init_db_for_path(path: str | Path):
