@@ -4,7 +4,7 @@ import tempfile
 
 from clipping_tools.db import init_db
 from clipping_tools.review.render import (
-    build_filter, font_path, select_moment, source_clip_for_post,
+    _replace_render, build_filter, font_path, select_moment, source_clip_for_post,
 )
 
 
@@ -63,3 +63,20 @@ def test_source_clip_for_post_allows_rendered_for_re_render():
     conn.execute("UPDATE posts SET status='rendered' WHERE id=16")
     conn.commit()
     assert source_clip_for_post(conn, 16) is not None
+
+
+def test_re_render_replaces_existing_render_row():
+    import os as _os
+    d = tempfile.mkdtemp()
+    db = _os.path.join(d, "state.db")
+    conn = init_db(db)
+    conn.execute("INSERT INTO sources(id,platform,external_id,name) VALUES(1,'twitch','s','s')")
+    conn.execute("INSERT INTO clips_raw(id,source_id,external_id,url,title,duration,created_at,status) "
+                 "VALUES(16,1,'c','u','H',25,'2026-01-01T00:00:00+00:00','new')")
+    conn.execute("INSERT INTO posts(id,render_id,caption,status,idempotency_key) "
+                 "VALUES(16,1,'H','rendered','clip-16')")
+    conn.execute("INSERT INTO renders(id,clip_id,variant,path) VALUES(1,16,'vertical-1080x1920','old.mp4')")
+    conn.commit()
+    _replace_render(conn, 16, "vertical-1080x1920", "new.mp4")
+    rows = conn.execute("SELECT id,path FROM renders WHERE clip_id=16").fetchall()
+    assert len(rows) == 1 and rows[0]["path"] == "new.mp4"

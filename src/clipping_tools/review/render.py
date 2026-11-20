@@ -163,6 +163,15 @@ def render(src: Path, out: Path, ass_path: Path, hook: str) -> dict:
     return info
 
 
+def _replace_render(conn: sqlite3.Connection, clip_id: int, variant: str, path: str) -> int:
+    """Insert or replace the render row for (clip_id, variant). Returns render id."""
+    conn.execute("DELETE FROM renders WHERE clip_id=? AND variant=?", (clip_id, variant))
+    cur = conn.execute(
+        "INSERT INTO renders(clip_id, variant, path) VALUES(?,?,?)", (clip_id, variant, path)
+    )
+    return int(cur.lastrowid)
+
+
 def render_post(post_id: int, db_path: str | Path) -> dict:
     """Full render for an approved post. Writes renders row + links post.render_id."""
     conn = init_db_for_path(db_path)
@@ -183,14 +192,10 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
     info = render(src, out, ass, hook)
     proxy_path = make_proxy(out)
     with conn:
-        cur = conn.execute(
-            "INSERT INTO renders(clip_id, variant, path, spec_json, checksum, rendered_at) "
-            "VALUES(?,?,?,?,?,?)",
-            (clip["id"], "vertical-1080x1920", str(out),
-             json.dumps({"hook": hook, "moment": moment, "peaks": peaks, "probe": info}),
-             "", utcnow()),
-        )
-        render_id = cur.lastrowid
+        render_id = _replace_render(conn, clip["id"], "vertical-1080x1920", str(out))
+        conn.execute("UPDATE renders SET spec_json=?, checksum='', rendered_at=? WHERE id=?",
+                     (json.dumps({"hook": hook, "moment": moment, "peaks": peaks, "probe": info}),
+                      utcnow(), render_id))
         conn.execute("UPDATE posts SET render_id=?, status='rendered' WHERE id=?", (render_id, post_id))
     return {"post_id": post_id, "render_id": render_id, "path": str(out),
             "proxy_path": str(proxy_path) if proxy_path else None, "probe": info}
