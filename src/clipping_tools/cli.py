@@ -152,6 +152,14 @@ def review_selftest() -> None:
 
 
 @app.command()
+def render(post_id: int) -> None:
+    """Render an approved post into a captioned 1080x1920 vertical mp4."""
+    from .review.render import render_post
+    result = render_post(post_id, ROOT / "data/state.db")
+    typer.echo(f"RENDER_OK post={result['post_id']} render={result['render_id']} path={result['path']}")
+
+
+@app.command()
 def review_publish() -> None:
     """Post pending drafts to Discord #clip-review as embeds with buttons."""
     import asyncio
