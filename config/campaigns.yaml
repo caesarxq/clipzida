@@ -6,6 +6,7 @@ campaigns:
   - name: "Dasgasd3m x RUCKUS | GTA 6"
     external_id: "051002dd-5c46-43d0-a446-43f2957ba3a9"
     subject: "Dasgasd3m (Dom) funny GTA 6 moments"
+    broadcaster_handles: [dasgasd3m, dom]
     operator: Ruckus
     pay_model: per_view
     rate_per_1k: 2.00
@@ -22,6 +23,7 @@ campaigns:
   - name: "$5,000 Lauren Hamden GTA 6 Clipping"
     external_id: "dd617572-f0f7-4754-8df5-4c0deb81763a"
     subject: "Lauren Hamden (twitch.tv/laurenhamdenn)"
+    broadcaster_handles: [laurenhamdenn]
     operator: Reach
     pay_model: per_view
     rate_per_1k: 1.50
@@ -39,6 +41,7 @@ campaigns:
   - name: "YourRAGE $5,000 GTA 6 Pool"
     external_id: "be9b123e-ea47-4305-b6c5-af81f503b247"
     subject: "YourRAGE (twitch.tv/yourragegaming) GTA 6 marathon"
+    broadcaster_handles: [yourragegaming]
     operator: Reach
     pay_model: pool
     pool_total: 5000.0
@@ -52,6 +55,7 @@ campaigns:
   - name: "Kai Cenat - $10,000 GTA 6 Pool"
     external_id: "1d2bcb00-c904-415f-aa82-f95b96baad86"
     subject: "Kai Cenat GTA 6 streams"
+    broadcaster_handles: [kaicenat]
     operator: Clipped & Shipped
     pay_model: pool
     pool_total: 10000.0
@@ -64,6 +68,7 @@ campaigns:
   - name: "$12,500 LACY GTA VI Marathon Pool"
     external_id: "a5c63fad-cd53-4b81-9305-4a2d1696872a"
     subject: "Lacy GTA 6 marathon"
+    broadcaster_handles: [lacy]
     operator: Reach
     pay_model: pool
     pool_total: 12500.0
@@ -78,6 +83,7 @@ campaigns:
   - name: "$5,000 Clix GTA VI Marathon Pool"
     external_id: "985dc674-c75e-44fc-ac87-1b1506324389"
     subject: "Clix GTA 6 marathon"
+    broadcaster_handles: [clix]
     operator: Reach
     pay_model: pool
     pool_total: 5000.0
@@ -92,6 +98,7 @@ campaigns:
   - name: "TOMO GTA VI Clipping"
     external_id: "df6de26f-86ec-4782-b818-1fc8053b99a4"
     subject: "Tomo (youtube.com/@Tomovids)"
+    broadcaster_handles: [tomovids]
     operator: Clipping Nation
     pay_model: per_view
     rate_per_1k: 1.50

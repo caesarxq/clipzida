@@ -60,15 +60,21 @@ def doctor() -> None:
     raise typer.Exit(0 if ok else 1)
 
 
-def _persist_candidates(db_path, clips, threshold: float, dry_run: bool = False) -> int:
-    """Apply score threshold and persist (or print in dry-run). Returns kept count."""
-    conn = db.init_db(db_path)
+def _persist_candidates(db_path, clips, threshold: float, dry_run: bool = False,
+                        licensed: set[str] | None = None) -> int:
+    """Apply rights gate + score threshold and persist. Returns kept count."""
     from .prefilter import passes_gates, score
+    licensed = licensed or set()
+    conn = db.init_db(db_path)
     kept = 0
     for c in clips:
         if not passes_gates(c):
             continue
-        c.score = score(c, source_weight=0.0)
+        from .ingest_policy import licensed_source_weight
+        weight = licensed_source_weight(c.broadcaster_name, licensed)
+        if licensed and weight == 0.0:
+            continue  # rights gate: unlicensed streamer
+        c.score = score(c, source_weight=weight)
         if c.score < threshold:
             continue
         if dry_run:
@@ -99,7 +105,12 @@ def ingest(hours: float = 24.0, dry_run: bool = True) -> None:
         import yaml
         cfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text())
         threshold = float(cfg.get("prefilter", {}).get("score_threshold", 0.35))
-        kept = _persist_candidates(ROOT / "data/state.db", clips, threshold, dry_run=dry_run)
+        camp = yaml.safe_load((ROOT / "config/campaigns.yaml").read_text())
+        from .ingest_policy import licensed_from_campaigns
+        licensed = licensed_from_campaigns(camp.get("campaigns", []))
+        typer.echo(f"licensed broadcasters: {', '.join(sorted(licensed))}")
+        kept = _persist_candidates(ROOT / "data/state.db", clips, threshold,
+                                   dry_run=dry_run, licensed=licensed)
         typer.echo(f"{kept} passed prefilter (threshold={threshold}, dry_run={dry_run})")
 
     asyncio.run(_run())
