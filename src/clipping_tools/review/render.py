@@ -108,13 +108,35 @@ def select_moment(words: list[dict], target_min: float = 18, target_max: float =
     return {"start": round(start, 2), "end": round(start + duration, 2)}
 
 
+def _wrap_word(word: str, start: float, end: float, max_chars: int = 24) -> list[dict]:
+    """Split an over-long caption unit into chunks so it never floods the frame."""
+    text = str(word).strip()
+    if len(text) <= max_chars:
+        return [{"word": text, "start": start, "end": end}]
+    words = text.split()
+    chunks, cur = [], ""
+    for w in words:
+        cand = (cur + " " + w).strip()
+        if len(cand) > max_chars and cur:
+            chunks.append(cur)
+            cur = w
+        else:
+            cur = cand
+    if cur:
+        chunks.append(cur)
+    span = max(end - start, 0.08)
+    step = span / len(chunks)
+    return [{"word": c, "start": round(start + i * step, 2),
+             "end": round(start + (i + 1) * step, 2)} for i, c in enumerate(chunks)]
+
+
 def make_ass(words: list[dict], ass_path: Path) -> None:
     header = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
         "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, "
         "Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        "Style: Default,Arial,68,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,0,2,60,60,560,1\n\n"
+        "Style: Default,Arial,56,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,0,2,60,60,560,1\n\n"
         "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
 
@@ -122,9 +144,24 @@ def make_ass(words: list[dict], ass_path: Path) -> None:
         h = int(t // 3600); m = int(t % 3600 // 60); s = t % 60
         return f"{h}:{m:02d}:{s:05.2f}"
 
+    units = []
+    for w in words:
+        units.extend(_wrap_word(w.get("word", ""), float(w.get("start", 0)), float(w.get("end", 0))))
+    # Group caption units into display lines bounded by a character budget so a
+    # single line can never flood the frame.
+    lines_units, cur, cur_len = [], [], 0
+    for u in units:
+        n = len(u["word"])
+        if cur and cur_len + n + 1 > 28:
+            lines_units.append(cur)
+            cur, cur_len = [], 0
+        cur.append(u)
+        cur_len += n + (1 if cur_len else 0)
+    if cur:
+        lines_units.append(cur)
+
     lines = []
-    for i in range(0, len(words), 4):
-        group = words[i:i+4]
+    for group in lines_units:
         for idx, w in enumerate(group):
             parts = []
             for j, gw in enumerate(group):
