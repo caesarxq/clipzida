@@ -105,6 +105,36 @@ class EditCaptionModal(discord.ui.Modal, title="Edit caption"):
         await interaction.response.send_message("Caption updated and approved.", ephemeral=True)
 
 
+def parse_component(custom_id: str) -> tuple[str, int] | None:
+    parts = str(custom_id or "").split(":")
+    if len(parts) == 3 and parts[0] == "clipzida" and parts[1] in {"approve", "reject", "edit"}:
+        try:
+            return parts[1], int(parts[2])
+        except ValueError:
+            return None
+    return None
+
+
+async def handle_component(interaction, custom_id: str, db_path: str,
+                           reviewer_role: str) -> bool:
+    """Handle a component interaction by custom_id — works for views posted by any process."""
+    parsed = parse_component(custom_id)
+    if parsed is None:
+        return False
+    action, post_id = parsed
+    roles = [str(r.id) for r in getattr(interaction.user, "roles", [])]
+    if not is_reviewer(roles, reviewer_role):
+        await interaction.response.send_message("Reviewer role required.", ephemeral=True)
+        return True
+    if action in {"approve", "reject"}:
+        decide(roles, reviewer_role, action, post_id, str(interaction.user.id),
+               conn=init_db(db_path))
+        await interaction.response.send_message(f"Post #{post_id}: {action} recorded.", ephemeral=True)
+    elif action == "edit":
+        await interaction.response.send_modal(EditCaptionModal(post_id, reviewer_role, db_path))
+    return True
+
+
 def make_bot() -> discord.Client:
     intents = discord.Intents.default()  # no message_content — slash + components only
     client = discord.Client(intents=intents)
@@ -113,6 +143,12 @@ def make_bot() -> discord.Client:
     @tree.command(name="ping", description="Clipzida bot health check")
     async def ping(interaction: discord.Interaction):
         await interaction.response.send_message("pong", ephemeral=True)
+
+    @client.event
+    async def on_interaction(interaction: discord.Interaction):
+        if interaction.type == discord.InteractionType.component:
+            await handle_component(interaction, str((interaction.data or {}).get("custom_id", "")),
+                                   _DB_PATH, _REVIEWER_ROLE)
 
     @client.event
     async def on_ready():
