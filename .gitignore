@@ -15,10 +15,12 @@ cookies*.txt
 # Media artifacts & state
 data/
 workspace/
+bin/
 *.mp4
 *.wav
 *.ass
 *.mov
+*.png
 
 # OS / editor
 .DS_Store

@@ -6,27 +6,26 @@
 
 ---
 
-## 0. Decision register
+## 0. Decision register — CONFIRMED by Mohamed 2026-11-20
 
-The preference form timed out; the plan proceeds on **assumed defaults** (my recommendations). Confirm or flip any row — each maps to a concrete config change, not a rewrite.
-
-| # | Decision | Assumed default | If you flip it |
+| # | Decision | Confirmed value | Consequence |
 |---|---|---|---|
-| D1 | Content source | Campaign-licensed + permissioned streamer clips (Twitch primary) | Own-gameplay track adds capture ingest (P9.4); no-permission track removes rights gate (not recommended) |
-| D2 | Platforms v1 | TikTok + YouTube Shorts + IG Reels + X | Drop/add = enable/disable adapter in `config.yaml`; no core changes |
-| D3 | Autonomy | Approval queue → graduate to auto-post after clean-run criteria (P7.4) | Full-auto day one = set `autonomy: auto` (raises ban risk); permanent queue = never graduate |
-| D4 | Goal | Campaign revenue first; audience as byproduct | Brand-first reweights scoring toward evergreen content and adds commentary layer for YPP |
-| D5 | Hosting | $0 local M2 Air, launchd + caffeinate | VPS (~$6/mo) moves ingest/scheduler/posting; Mac stays render farm |
-| D6 | Language | English captions/metadata, global audience | Arabic/other = whisper language + caption font + LLM prompt locale |
-| D7 | Volume | 6–12 posts/day across platforms (quota-bound, §12) | Higher needs 2nd GCP project + TikTok audit + IG limit headroom |
+| D1 | Content source | Campaign-licensed + permissioned streamer clips ONLY (no own gameplay — doesn't own the game, no time to play) | P9.4 own-gameplay track removed from roadmap |
+| D2 | Platforms v1 | TikTok + YouTube Shorts + IG Reels + X | all four adapters in scope |
+| D3 | Autonomy | Approval queue → graduate after clean-run criteria (P7.4) | review surface = **Hermes + Discord** (D8) |
+| D4 | Goal | Campaign revenue first; audience as byproduct | per-view campaigns prioritized over pools |
+| D5 | Hosting | **$30/month budget** → VPS hybrid (§13A): 24/7 pipeline on VPS, Mac = dev + review | Hetzner CPX31-class box recommended |
+| D6 | Language/angle | English, **mixed angles** (funny/fail + hype edits + news/guides) | angle presets in scoring + caption writer (P3.4) |
+| D7 | Volume | 6–12 posts/day at steady state — **gated by fresh-account warmup ramp (§5B)** | full volume ~week 3–4 |
+| D8 | Review surface | **Hermes + Discord** (bot with approve/reject buttons, §13A) | P7.3/P7.5 updated |
+| D9 | Identity | **One brand across platforms, multiple accounts** (per-platform mains + campaign-dedicated/sub-angle accounts under the brand) | accounts table + per-account token/quota isolation (§4, §5A) |
+| D10 | Accounts | **ALL FRESH** — nothing exists yet | Account Factory runbook §5A is the critical path |
 
-**Open questions for Mohamed (answer in chat, any order):**
-1. Which accounts/dev apps already exist? (Twitch dev app, Google Cloud project + YouTube channel, Meta app + IG Business + FB Page, TikTok dev app, X dev app, Content Rewards account)
-2. Do you own GTA 6 on PS5/Xbox, and any capture capability? (unlocks own-gameplay track)
-3. Content angle priority: funny/fail moments · hype edits · news/guides · mixed?
-4. Preferred review surface: terminal CLI · local web dashboard · Hermes/Telegram notifications?
-5. Posting identity: one brand across platforms, or per-streamer fan accounts (some campaigns require dedicated accounts, e.g., Lauren Hamden)?[72]
-6. Any hard budget ceiling beyond $0 APIs (e.g., VPS, paid LLM scoring)?
+**Remaining decisions (small, answer in chat):**
+1. **Brand name** — my recommendation: **Leonida Clips** (@leonidaclips). Alternatives: Vice City Viral (@vicecityviral), Neon Six (@neonsix). Leonida = GTA 6's state; niche-clear, brandable, survives beyond launch hype. I'll availability-check handles on all platforms once you pick (or say "you choose").
+2. Brand email + phone for signups (you create the Gmail; OTPs stay on your device — secrets go to the vault, never chat).
+3. Discord server: create one (or reuse existing) + invite me to set up the bot.
+4. VPS provider approval: Hetzner (~$17.80/mo, card payment by you).
 
 ---
 
@@ -140,12 +139,18 @@ CREATE TABLE metrics(post_id INTEGER, fetched_at TEXT, views INTEGER, likes INTE
   PRIMARY KEY(post_id, fetched_at));
 CREATE TABLE tokens(service TEXT PRIMARY KEY, access_token TEXT, refresh_token TEXT,
   expires_at TEXT, scopes TEXT);
+CREATE TABLE accounts(id INTEGER PRIMARY KEY, platform TEXT, handle TEXT, brand_role TEXT,
+  -- main | campaign_dedicated | angle_sub
+  campaign_id INTEGER, created_at TEXT, warmup_stage INTEGER, daily_cap INTEGER,
+  token_ref TEXT, status TEXT, UNIQUE(platform, handle));
 CREATE TABLE quota_usage(service TEXT, day TEXT, units INTEGER, PRIMARY KEY(service, day));
 CREATE TABLE audit_log(id INTEGER PRIMARY KEY, ts TEXT, stage TEXT, entity TEXT,
   entity_id INTEGER, event TEXT, detail_json TEXT);
 ```
 
-## 5. Phase 0 — Environment & accounts (Day 1)
+## 5. Phase 0 — Environment & accounts (Day 1–2)
+
+**All accounts are FRESH (D10).** Execute P0.5–P0.10 in the dependency order of the Account Factory runbook (§5A); Mohamed performs identity/OTP/payment/mobile steps, the agent prepares and drives everything else. Warmup caps (§5B) apply from first post.
 
 | Task | Description | Est | Acceptance |
 |---|---|---|---|
@@ -160,6 +165,43 @@ CREATE TABLE audit_log(id INTEGER PRIMARY KEY, ts TEXT, stage TEXT, entity TEXT,
 | P0.9 | **Manual:** X developer free-tier app → OAuth2 PKCE (`tweet.write media.write users.read offline.access`) | 20m | refresh token stored; test post to self succeeds |
 | P0.10 | **Manual:** Content Rewards creator account; join 2–3 per-view campaigns (TOMO, Ruckus, Lauren Hamden if dedicated account); export campaign rule pages | 30m | campaigns visible in dashboard; rules saved to `campaigns.yaml` |
 | P0.11 | launchd plists + `caffeinate` wrapper for ingest/render/publish loops; log rotation | 1h | loops survive reboot; sleep gaps logged |
+
+## 5A. Account Factory runbook (fresh accounts, one brand, multiple accounts)
+
+**Brand kit first** (blocks every signup):
+| Task | Description | Owner |
+|---|---|---|
+| AF.1 | Pick brand name (recommend **Leonida Clips**); availability-check handles on TikTok/IG/X/YouTube | Mohamed picks, agent checks |
+| AF.2 | Generate logo + banners + bio template (consistent across platforms); store in `assets/brand/` | agent |
+| AF.3 | Create brand Gmail (e.g., leonidaclips@gmail.com); all signups use it (+aliases per platform); passwords → vault, never chat | Mohamed (OTP) |
+| AF.4 | Account matrix naming: `<brand>` mains per platform; campaign-dedicated accounts `<brand>.<streamer>` (Lauren Hamden requires one[72]); angle subs later | agent config |
+
+**Signup dependency order** (agent drives browser to the OTP/credential wall; Mohamed completes identity steps):
+1. **Discord** server + bot application (review surface, §13A) — no dependencies.
+2. **Google**: Gmail → YouTube brand channel → Cloud project → YouTube Data API v3 → OAuth consent **External, PUBLISHED** (⚠ testing-mode refresh tokens expire in 7 days — publish the consent screen; unverified is fine for own-account use, and the Nov 2 change removed the upload lock[61]) → Desktop OAuth client → consent flow → refresh token to vault.
+3. **Twitch**: dev.twitch.tv/console app registration (confidential, client-credentials) — needs only a Twitch account (fresh signup, email verify).
+4. **Meta**: fresh FB profile (⚠ real-name policy — use Mohamed's real identity for the admin profile; brand lives on the Page) → warm up 2–3 days → create Brand Page → fresh IG account (mobile signup, Mohamed) → convert to Business, link Page → Meta developer app (Business) → Facebook Login for Business → `instagram_basic instagram_content_publish pages_read_engagement` → long-lived tokens. App Review only needed for Advanced Access; own accounts work on Standard.[9][10]
+5. **TikTok**: fresh account (mobile signup, Mohamed) → complete profile → **3–5 days niche consumption before first post (§5B)** → developers.tiktok.com app → Content Posting API + Direct Post config → scopes `user.info.basic video.upload` → **submit audit immediately** (demo video + use-case writeup; long lead time).[6][8]
+6. **X**: fresh account (web signup, OTP) → complete profile → developer.x.com free-tier app → OAuth2 PKCE (`tweet.write media.write users.read offline.access`).[12]
+7. **Content Rewards**: creator signup with brand email → join per-view campaigns once posting accounts exist (Ruckus requires a GTA 6-posting account).[72]
+8. **VPS**: Hetzner account (Mohamed, card) → agent provisions CPX31-class box via cloud API/SSH (§13A).
+
+**Secrets policy:** every credential lands in the Hermes vault / `.env` (gitignored); nothing sensitive in chat or commits.
+
+## 5B. Fresh-account warmup & trust ramp (all accounts are new — this gates volume)
+
+New accounts get algorithmic trust constraints; rushed posting is the top shadowban trigger. Operator guidance (not published caps — treat as heuristics and watch account-status dashboards):[95][92]
+
+| Platform | Days 1–3 | First posting week | Week 2 | Week 3+ (steady) |
+|---|---|---|---|---|
+| TikTok | profile complete + watch/engage GTA 6 niche only, no posts | **1 video/day, 2 max**[90] | 2/day | 3/day per account |
+| IG Reels | same consumption warmup | **1 Reel/day for first 4–7 posting days**[91] | 1–2/day if reach/completion holds | 2–3/day |
+| X | profile + light manual engagement | 1–2 posts/day (new accounts <30d under heightened scrutiny[93]) | 2–3/day | 3–5/day (500/mo cap[12]) |
+| YouTube | channel art/about complete | 2–3 uploads/day | 3–4/day | 5/day (quota cap[11]) |
+
+Rules: one account per device/IP during warmup; no engagement pods; consistent niche signals; check TikTok notifications / IG Account Status before assuming shadowban.[92][95]
+**Enforcement:** `accounts.daily_cap` + `warmup_stage` (§4); ramp scheduler raises caps by account age; P7.4 graduation additionally requires account age ≥14 days.
+**Consequence:** week 1–2 total volume ≈3–6 posts/day; steady 8–12/day from week 3–4. First campaign revenue still week 2 — per-view campaigns pay on any approved view, no follower minimum.[72]
 
 ## 6. Phase 1 — Tracer bullet (Day 1–2)
 
@@ -194,7 +236,7 @@ One vertical slice before any engine work: **1 Twitch clip → mp4 → transcrip
 | P3.1 | LLM provider ABC + OpenRouter adapter; query `/v1/models` at startup (slugs volatile); `:free` models for dev/CI, cheap paid for prod | 2h | provider swap test; model-list cache test |
 | P3.2 | Moment selector: input = transcript + energy peaks + clip metadata; output = typed `MomentSelection[]` (18–45s, self-contained, hook in first 2s, 3–5-word ALL-CAPS hook title); speech-start snap; JSON-schema validation with 1 repair retry[19] | 4h | schema tests; golden-fixture selection review by Mohamed |
 | P3.3 | Spoiler/scene classifier: labels {none, mild, story_reveal, ending, isolated_cutscene, ingame_entertainment, cheat_glitch, leak}; cutscene-heuristic = high plot-dialogue density + low gameplay audio variance; ambiguous → human review queue (policy says email copyright@take2games.com when unsure)[14] | 3h | labeled fixture set ≥90% agreement; ending/leak always hard-fail |
-| P3.4 | Hook/caption writer: per-platform caption + hashtags + required campaign tokens (streamer name, #LACY etc.) + attribution line (streamer + clip URL); tone presets per angle (D3 open question) | 2h | campaign-token compliance test per campaign |
+| P3.4 | Hook/caption writer with **mixed-angle presets** (D6): `funny` (punchline-first), `hype` (energy-peak-first, fast cuts), `news/guide` (context card + voiceover-style captions); angle tag stored per moment; per-platform caption + hashtags + required campaign tokens (streamer name, #LACY etc.) + attribution line (streamer + clip URL) | 2h | campaign-token compliance test per campaign; one fixture per angle |
 | P3.5 | Scoring feedback hook: store selection features for later weight tuning (P8.4) | 1h | features persisted |
 
 ## 9. Phase 4 — Compliance gates (Day 5–6, hard gates before render)
@@ -252,10 +294,25 @@ Build order: **YouTube → X → Instagram → TikTok** (easiest autonomy first;
 |---|---|---|---|
 | P7.1 | Post queue: SQLite-backed, per-platform token buckets, posting slots (launch wave: ASAP; steady: 12:00–23:00 EAT overlap with US evening), jitter, idempotent resume | 3h | crash-restart test posts nothing twice |
 | P7.2 | Review CLI: `clipping-tools review` — list pending (score, campaign, gate verdicts), preview path, approve/reject/edit-caption; batch approve | 2h | full approve→publish flow from terminal |
-| P7.3 | Local dashboard (FastAPI, localhost:8765): clip preview player, gate badges, one-click approve, campaign budget widget, strike monitor | 4h | Mohamed signs off UX |
+| P7.3 | **Discord review bot** (primary, D8): #clip-review embeds with mp4 preview + Approve/Reject/Edit buttons → approvals table (§13A); local FastAPI dashboard kept as fallback | 4h | approve from Discord releases the post (test) |
 | P7.4 | **Graduation policy:** after ≥14 days AND ≥50 approved posts AND 0 strikes/takedowns AND ≥90% approvals unchanged → `autonomy: auto` for whitelisted campaign sources only; new sources stay queued; any strike → instant revert to full queue | 2h | policy simulation tests; kill-switch CLI |
-| P7.5 | Notifications: Hermes cron digest (pending count, failures, campaign budgets) or Telegram hook — pending D4 answer | 1.5h | digest delivered |
+| P7.5 | Notifications: Discord #alerts (failures, token expiry, budget <20%, strikes → auto-halt) + Hermes cron digest (pending count, revenue, campaign runway) | 1.5h | digest delivered to both surfaces |
 | P7.6 | Kill switch: `clipping-tools halt` pauses all publishing; `resume` requires confirm | 0.5h | halt blocks queue (test) |
+
+## 13A. Discord review bot + VPS topology ($30/mo confirmed)
+
+**Discord bot** (discord.py, free; runs on VPS):
+- `#clip-review`: embed per pending post — hook title, streamer, campaign, angle, gate badges, score; **mp4 attached** (Discord 25MB limit; our 1080×1920 30–45s renders ≈5–15MB fit); buttons **Approve / Reject / Edit-caption** → writes `approvals` → queue releases. Edit opens a modal.
+- `#alerts`: adapter failures, token expiry warnings, campaign budget <20%, any takedown/strike → auto-halt + @Mohamed.
+- `#daily`: morning digest (pending, published yesterday, views, revenue estimate) mirrored from Hermes cron.
+- Bot token in vault; bot needs no public inbound port (gateway WebSocket) — works behind NAT.
+
+**VPS topology** (D5 = $30/mo):
+- Recommended: **Hetzner CPX31** — 4 vCPU AMD / 8GB RAM / 160GB NVMe, ~$17.80/mo.[87] Runs the ENTIRE pipeline 24/7: ingest, whisper-small (CPU int8), libx264 veryfast renders, scheduler, Discord bot, publishing. 160GB holds weeks of artifacts; cleanup job keeps <60%.
+- Budget alternative: CX32 (~$8.20/mo, 4GB[87][89]) with renders offloaded to the Mac — rejected as default: Mac sleep breaks autonomy; CPX31 keeps the loop closed. Verify live pricing at signup.[88]
+- Mac = dev machine, dashboard fallback, optional render offload during marathons.
+- Provisioning: cloud-init + SSH key from vault; systemd units per worker; SQLite on the VPS (single writer); rsync artifacts to Mac on demand.
+- Budget allocation: VPS $17.80 + OpenRouter scoring ~$8 + brand domain ~$1.20 + buffer ~$3 = **$30**.
 
 ## 14. Phase 8 — Analytics, campaign ledger, feedback (Day 11–14)
 
@@ -311,16 +368,16 @@ Global rules: no same-clip double-submission; re-cut per campaign; budgets deple
 | R12 | Policy/API drift (all platforms move fast) | Med | Med | weekly policy re-check job; revision-history watch (YT changed twice in Nov 2026[61]); feature flags |
 | R13 | Same clip double-submitted → campaign ban | Low | Med | P6.8 hard block + re-cut variants |
 
-## 18. Cost table
+## 18. Cost table ($30/mo ceiling — confirmed)
 
 | Item | Cost |
 |---|---|
-| Twitch / Kick / YouTube / IG / X / TikTok APIs (free tiers) | $0 |
-| yt-dlp / ffmpeg / whisper / Gaming-Clipper patterns (MIT) | $0 |
-| OpenRouter scoring (free models dev; paid prod ~1–5¢/clip) | $0–5/mo |
-| Electricity (Mac) | ~$1–2/mo |
-| Optional VPS (P9.6) | ~$6/mo |
-| **Total v1** | **$0–7/mo** |
+| Hetzner CPX31 VPS (4 vCPU/8GB/160GB), 24/7 pipeline[87] | ~$17.80/mo |
+| OpenRouter paid scoring (free models for dev/CI) | ~$5–8/mo |
+| Brand domain (.com, link-in-bio) | ~$1.20/mo amortized |
+| Twitch / Kick / YouTube / IG / X / TikTok APIs, Discord bot | $0 |
+| Buffer | ~$3/mo |
+| **Total** | **≤$30/mo** |
 
 ## 19. Test plan (TDD throughout)
 
@@ -338,18 +395,18 @@ Global rules: no same-clip double-submission; re-cut per campaign; budgets deple
 | M0: accounts + env ready | Day 1 | P0 complete; doctor green; TikTok audit submitted |
 | M1: first captioned clip | Day 2 | tracer bullet renders a real GTA 6 moment |
 | M2: first public post (YT Shorts) | Day 4–5 | ingest→post autonomous except approval tap |
-| M3: 4-platform publishing | Day 10–11 | YT + X + IG live; TikTok inbox path live |
+| M3: 4-platform publishing | Day 10–11 | YT + X + IG live; TikTok inbox path live; **volumes under warmup caps (§5B)** |
 | M4: first campaign revenue | Week 2 | ≥1 approved-view payout recorded in ledger |
-| M5: graduation review | Week 3 | P7.4 criteria evaluated; auto-post for whitelisted sources |
+| M5: graduation review | Week 3–4 | P7.4 criteria + account age ≥14d; auto-post for whitelisted sources; warmup ramp completes |
 | M6: feedback loop live | Week 4 | weekly report + weight tuning + pool estimator |
 
 Critical path: **P0.8 TikTok audit (external lead time)** and **P0.6/P0.7 account setup (manual)** — start both Day 1. Everything else is agent-executable.
 
-## 21. Immediate next actions (on your go)
+## 21. Immediate next actions
 
-1. You: answer D1–D7 flips + Q1–Q6 (accounts inventory is the blocker for P0.5–P0.10).
-2. Me: execute P0.1–P0.4 + P1 tracer bullet today; hand you the exact account-setup click-path for each platform as we hit it.
-3. Me: seed campaign registry from live marketplace pages (P2.6) and flag the 2–3 best per-view campaigns to join first.
+1. **Mohamed (≈30 min spread over day 1–2):** pick brand name (recommend Leonida Clips); create brand Gmail; create Discord server; card-payment for Hetzner when provisioned. Mobile signups (IG/TikTok) + OTPs as we hit them (§5A).
+2. **Agent, today:** tracer bullet (done this run — real GTA 6 clip → captioned 1080×1920 render); handle availability checks once name picked; logo/banner generation; drive desktop signups to the OTP wall.
+3. **Agent, next:** P2 ingest engine as soon as the Twitch app exists; seed live campaign registry (P2.6); VPS provisioning + Discord bot skeleton in parallel.
 
 ## Sources
 
@@ -357,6 +414,7 @@ Critical path: **P0.8 TikTok audit (external lead time)** and **P0.6/P0.7 accoun
 [4] https://dev.twitch.tv/docs/api/clips — Twitch Clips guide
 [5] https://www.activepieces.com/blog/twitch-api-access-tokens-and-rate-limits-2026 — Twitch API tokens and rate limits 2026
 [6] https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post — TikTok Direct Post reference
+[8] https://developers.tiktok.com/docs/en/content-posting-api-get-started — TikTok Content Posting API get started
 [9] https://developers.facebook.com/documentation/instagram-platform/content-publishing — Meta IG content publishing
 [10] https://github.com/fbsamples/reels_publishing_apis/blob/main/insta_reels_publishing_api_sample/README.md — IG Reels publishing API sample
 [11] https://developers.google.com/youtube/v3/determine_quota_cost — YouTube Data API quota calculator
@@ -386,3 +444,11 @@ Critical path: **P0.8 TikTok audit (external lead time)** and **P0.6/P0.7 accoun
 [76] https://support.google.com/youtube/answer/1311392?hl=en — YouTube channel monetization policies
 [77] https://support.google.com/youtube/community-guide/271248162/faq-reused-content-youtube — FAQ: Reused Content & YouTube's Partner Program - YouTube ...
 [81] https://dev.twitch.tv/docs/authentication/scopes — Twitch Access Token Scopes
+[87] https://cloudmart.dev/provider/hetzner — Hetzner pricing Nov 2026 (CloudMart)
+[88] https://usehcm.com/hetzner-pricing — Hetzner cloud pricing 2026
+[89] https://stackrates.ai/blog/hetzner-cloud-honest-review — Hetzner review 2026 plan prices
+[90] https://cut.pro/en/blog/how-to-warm-up-tiktok-account-2026 — TikTok new-account warmup 2026
+[91] https://www.tokportal.com/learn/warm-up-new-instagram-tiktok-account — TokPortal: IG/TikTok warmup
+[92] https://www.jem.social/blog/how-to-warm-up-tiktok-and-instagram-accounts — Jem Social: 14-day warmup plan
+[93] https://socialnexis.com/guides/twitter-automation-safe-2026 — SocialNexis: X automation limits 2026
+[95] https://www.tokportal.com/learn/tiktok-shadow-limits-new-accounts — TokPortal: TikTok shadow limits new accounts
