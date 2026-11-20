@@ -169,7 +169,7 @@ def _replace_render(conn: sqlite3.Connection, clip_id: int, variant: str, path: 
     cur = conn.execute(
         "INSERT INTO renders(clip_id, variant, path) VALUES(?,?,?)", (clip_id, variant, path)
     )
-    return int(cur.lastrowid)
+    return int(cur.lastrowid or 0)
 
 
 def render_post(post_id: int, db_path: str | Path) -> dict:
