@@ -60,6 +60,27 @@ def doctor() -> None:
     raise typer.Exit(0 if ok else 1)
 
 
+def _persist_candidates(db_path, clips, threshold: float, dry_run: bool = False) -> int:
+    """Apply score threshold and persist (or print in dry-run). Returns kept count."""
+    conn = db.init_db(db_path)
+    from .prefilter import passes_gates, score
+    kept = 0
+    for c in clips:
+        if not passes_gates(c):
+            continue
+        c.score = score(c, source_weight=0.0)
+        if c.score < threshold:
+            continue
+        if dry_run:
+            typer.echo(f"  [dry] {c.external_id[:24]:24s} {c.broadcaster_name:16s} "
+                       f"views={c.view_count:<8d} score={c.score:.4f}")
+        else:
+            db.upsert_clip(conn, c)
+        kept += 1
+    conn.close()
+    return kept
+
+
 @app.command()
 def ingest(hours: float = 24.0, dry_run: bool = True) -> None:
     """Poll Twitch GTA VI clips (requires TWITCH_CLIENT_ID/SECRET)."""
@@ -75,19 +96,11 @@ def ingest(hours: float = 24.0, dry_run: bool = True) -> None:
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
         clips = await client.fetch_candidates(since)
         typer.echo(f"fetched {len(clips)} clips since {since.isoformat()}")
-        conn = db.init_db(ROOT / "data/state.db")
-        from .prefilter import passes_gates, score
-        kept = 0
-        for c in clips:
-            if not passes_gates(c):
-                continue
-            c.score = score(c, source_weight=0.0)
-            if dry_run:
-                typer.echo(f"  [dry] {c.external_id[:24]:24s} {c.broadcaster_name:16s} views={c.view_count:<8d} score={c.score}")
-            else:
-                db.upsert_clip(conn, c)
-            kept += 1
-        typer.echo(f"{kept} passed prefilter (dry_run={dry_run})")
+        import yaml
+        cfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text())
+        threshold = float(cfg.get("prefilter", {}).get("score_threshold", 0.35))
+        kept = _persist_candidates(ROOT / "data/state.db", clips, threshold, dry_run=dry_run)
+        typer.echo(f"{kept} passed prefilter (threshold={threshold}, dry_run={dry_run})")
 
     asyncio.run(_run())
 
