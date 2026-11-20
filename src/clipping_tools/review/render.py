@@ -27,7 +27,7 @@ def source_clip_for_post(conn: sqlite3.Connection, post_id: int) -> dict | None:
     row = conn.execute(
         "SELECT c.id, c.url, c.title, c.duration, c.broadcaster FROM posts p "
         "JOIN clips_raw c ON c.id = CAST(SUBSTR(p.idempotency_key, 6) AS INTEGER) "
-        "WHERE p.id=? AND p.status='approved' AND p.idempotency_key LIKE 'clip-%'",
+        "WHERE p.id=? AND p.status IN ('approved','rendered') AND p.idempotency_key LIKE 'clip-%'",
         (post_id,),
     ).fetchone()
     return dict(row) if row else None

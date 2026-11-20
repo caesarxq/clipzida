@@ -55,3 +55,11 @@ def test_source_clip_for_post_rejects_wrong_status():
     conn.execute("UPDATE posts SET status='pending' WHERE id=16")
     conn.commit()
     assert source_clip_for_post(conn, 16) is None
+
+
+def test_source_clip_for_post_allows_rendered_for_re_render():
+    db = _seed()
+    conn = init_db(db)
+    conn.execute("UPDATE posts SET status='rendered' WHERE id=16")
+    conn.commit()
+    assert source_clip_for_post(conn, 16) is not None
