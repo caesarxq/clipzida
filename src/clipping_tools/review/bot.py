@@ -10,7 +10,7 @@ import sqlite3
 
 import discord
 
-from ..db import init_db
+from ..db import init_db, utcnow
 from .embeds import build_review_embed
 from .store import is_reviewer, record_decision
 
@@ -127,9 +127,30 @@ async def handle_component(interaction, custom_id: str, db_path: str,
         await interaction.response.send_message("Reviewer role required.", ephemeral=True)
         return True
     if action in {"approve", "reject"}:
+        caption = ""
+        conn = init_db(db_path)
+        row = conn.execute("SELECT caption FROM posts WHERE id=?", (post_id,)).fetchone()
+        if row:
+            caption = row["caption"] or ""
+        conn.close()
         decide(roles, reviewer_role, action, post_id, str(interaction.user.id),
                conn=init_db(db_path))
         await interaction.response.send_message(f"Post #{post_id}: {action} recorded.", ephemeral=True)
+        emoji = "✅" if action == "approve" else "❌"
+        status_word = "APPROVED" if action == "approve" else "REJECTED"
+        embed = discord.Embed(
+            title=f"{emoji} {status_word} — Post #{post_id}",
+            description=(
+                f"Caption: {caption[:200]}\n"
+                f"Decided by: {interaction.user.id}\n"
+                f"Decided at: {utcnow()}"
+            ),
+            color=discord.Color.green() if action == "approve" else discord.Color.red(),
+        )
+        try:
+            await interaction.message.edit(embeds=[embed], view=None)
+        except Exception:
+            pass  # message may be too old to edit; ephemeral reply still confirms
     elif action == "edit":
         await interaction.response.send_modal(EditCaptionModal(post_id, reviewer_role, db_path))
     return True
