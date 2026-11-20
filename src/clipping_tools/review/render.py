@@ -49,7 +49,12 @@ def font_path() -> str:
 
 
 def download_clip(url: str, dest: Path) -> None:
-    ytdlp = shutil.which("yt-dlp") or "yt-dlp"
+    candidates = [shutil.which("yt-dlp"),
+                  str(Path.home() / ".local/bin/yt-dlp"),
+                  "/home/clipzida/.local/bin/yt-dlp"]
+    ytdlp = next((c for c in candidates if c and Path(c).exists()), None)
+    if not ytdlp:
+        raise RuntimeError("yt-dlp not found on PATH or ~/.local/bin")
     subprocess.run([ytdlp, "-f", "best[ext=mp4]/best", "-o", str(dest), url],
                    check=True, capture_output=True, text=True, timeout=300)
 
