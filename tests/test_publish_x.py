@@ -1,5 +1,5 @@
 """RED: X (Twitter) publish adapter.
-OAuth 1.0a user context + hybrid media upload (v1.1 chunked upload -> v2 POST /2/tweets).
+OAuth 2.0 with PKCE + hybrid media upload (v2 media upload -> v2 POST /2/tweets).
 Follows the same pattern as publish/youtube.py and publish/tiktok.py.
 """
 from __future__ import annotations
@@ -43,22 +43,22 @@ def test_init_media_upload_returns_media_id(monkeypatch):
         def raise_for_status(self):
             pass
 
-    monkeypatch.setenv("X_ACCESS_TOKEN", "at")
-    monkeypatch.setenv("X_ACCESS_TOKEN_SECRET", "ats")
-    monkeypatch.setenv("X_API_KEY", "ak")
-    monkeypatch.setenv("X_API_SECRET", "aks")
+    monkeypatch.setenv("X_CLIENT_ID", "cid")
+    monkeypatch.setenv("X_CLIENT_SECRET", "csec")
 
     called = {}
     def fake_post(url, *, data=None, headers=None, auth=None, timeout=None):
         called["url"] = url
         called["has_media_category"] = data.get("media_category") == "tweet_video"
         called["has_total_bytes"] = data.get("total_bytes") == "11372195"
+        called["has_bearer"] = headers.get("Authorization", "").startswith("Bearer ")
         return FakeResp('{"media_id": "1638400000000000000", "media_id_string": "1638400000000000000", "size": 11372195, "expires_after_secs": 86400}')
 
-    media_id = init_media_upload("/tmp/v.mp4", 11372195, transport=fake_post)
+    media_id = init_media_upload("/tmp/v.mp4", 11372195, "at", transport=fake_post)
     assert media_id == "1638400000000000000"
     assert called["has_media_category"]
     assert called["has_total_bytes"]
+    assert called["has_bearer"]
 
 
 # ── Media upload: APPEND ─────────────────────────────────────────────
@@ -70,10 +70,8 @@ def test_append_media_chunk_uses_media_id_and_segment(monkeypatch):
         def raise_for_status(self):
             pass
 
-    monkeypatch.setenv("X_ACCESS_TOKEN", "at")
-    monkeypatch.setenv("X_ACCESS_TOKEN_SECRET", "ats")
-    monkeypatch.setenv("X_API_KEY", "ak")
-    monkeypatch.setenv("X_API_SECRET", "aks")
+    monkeypatch.setenv("X_CLIENT_ID", "cid")
+    monkeypatch.setenv("X_CLIENT_SECRET", "csec")
 
     captured = {}
     def fake_post(url, *, data=None, files=None, headers=None, auth=None, timeout=None):
@@ -84,7 +82,8 @@ def test_append_media_chunk_uses_media_id_and_segment(monkeypatch):
         return FakeResp()
 
     open("/tmp/v.mp4", "wb").write(b"\x00" * 1000)
-    append_media_chunk("/tmp/v.mp4", "1638400000000000000", 0, transport=fake_post)
+    append_media_chunk("/tmp/v.mp4", "1638400000000000000", 0, access_token="at",
+                       transport=fake_post)
     assert captured["has_media_id"]
     assert captured["has_segment"]
     assert captured["has_command"]
@@ -102,17 +101,15 @@ def test_finalize_media_returns_media_id(monkeypatch):
         def raise_for_status(self):
             pass
 
-    monkeypatch.setenv("X_ACCESS_TOKEN", "at")
-    monkeypatch.setenv("X_ACCESS_TOKEN_SECRET", "ats")
-    monkeypatch.setenv("X_API_KEY", "ak")
-    monkeypatch.setenv("X_API_SECRET", "aks")
+    monkeypatch.setenv("X_CLIENT_ID", "cid")
+    monkeypatch.setenv("X_CLIENT_SECRET", "csec")
 
     monkeypatch.setattr("clipping_tools.publish.x.time.sleep", lambda s: None)
 
     def fake_post(url, *, data=None, headers=None, auth=None, timeout=None):
         return FakeResp('{"media_id": "1638400000000000000", "media_id_string": "1638400000000000000", "processing_info": {"state": "succeeded"}}')
 
-    mid = finalize_media("1638400000000000000", transport=fake_post)
+    mid = finalize_media("1638400000000000000", "at", transport=fake_post)
     assert mid == "1638400000000000000"
 
 
@@ -128,10 +125,8 @@ def test_create_post_attaches_media(monkeypatch):
         def raise_for_status(self):
             pass
 
-    monkeypatch.setenv("X_ACCESS_TOKEN", "at")
-    monkeypatch.setenv("X_ACCESS_TOKEN_SECRET", "ats")
-    monkeypatch.setenv("X_API_KEY", "ak")
-    monkeypatch.setenv("X_API_SECRET", "aks")
+    monkeypatch.setenv("X_CLIENT_ID", "cid")
+    monkeypatch.setenv("X_CLIENT_SECRET", "csec")
 
     captured = {}
     def fake_post(url, *, json=None, headers=None, auth=None, timeout=None):
@@ -139,7 +134,7 @@ def test_create_post_attaches_media(monkeypatch):
         captured["json"] = json
         return FakeResp('{"data": {"id": "1876543210987654321", "text": "HE LOOKED AT ME #gta6 #shorts"}}')
 
-    result = create_post("HE LOOKED AT ME #gta6 #shorts", ["1638400000000000000"], transport=fake_post)
+    result = create_post("HE LOOKED AT ME #gta6 #shorts", ["1638400000000000000"], "at", transport=fake_post)
     assert result["id"] == "1876543210987654321"
     assert captured["json"]["media"]["media_ids"] == ["1638400000000000000"]
     assert captured["json"]["text"] == "HE LOOKED AT ME #gta6 #shorts"
@@ -183,10 +178,10 @@ def test_publish_to_x_writes_back_external_id_and_url(monkeypatch, tmp_path):
         # POST /2/tweets
         return FakeResp('{"data": {"id": "1876543210987654321", "text": "HE LOOKED AT ME #gta6 #shorts"}}')
 
+    monkeypatch.setenv("X_CLIENT_ID", "cid")
+    monkeypatch.setenv("X_CLIENT_SECRET", "csec")
     monkeypatch.setenv("X_ACCESS_TOKEN", "at")
     monkeypatch.setenv("X_ACCESS_TOKEN_SECRET", "ats")
-    monkeypatch.setenv("X_API_KEY", "ak")
-    monkeypatch.setenv("X_API_SECRET", "aks")
 
     monkeypatch.setattr(xmod.time, "sleep", lambda s: None)
     result = publish_to_x(16, db, os.path.join(d, "v.mp4"), transport=fake_post)
@@ -201,14 +196,12 @@ def test_publish_to_x_writes_back_external_id_and_url(monkeypatch, tmp_path):
     assert row["platform"] == "x"
 
 
-def test_publish_to_x_raises_when_no_token(monkeypatch, tmp_path):
+def test_publish_to_x_raises_when_no_client_id(monkeypatch, tmp_path):
     import clipping_tools.publish.x as xmod
     from clipping_tools.db import init_db
 
-    monkeypatch.delenv("X_ACCESS_TOKEN", raising=False)
-    monkeypatch.delenv("X_ACCESS_TOKEN_SECRET", raising=False)
-    monkeypatch.delenv("X_API_KEY", raising=False)
-    monkeypatch.delenv("X_API_SECRET", raising=False)
+    monkeypatch.delenv("X_CLIENT_ID", raising=False)
+    monkeypatch.delenv("X_CLIENT_SECRET", raising=False)
 
     db = os.path.join(tmp_path, "state.db")
     conn = init_db(db)
@@ -219,4 +212,24 @@ def test_publish_to_x_raises_when_no_token(monkeypatch, tmp_path):
         publish_to_x(16, db, "/tmp/v.mp4")
         assert False, "should have raised"
     except RuntimeError as e:
-        assert "token" in str(e).lower() or "credential" in str(e).lower()
+        assert "credential" in str(e).lower() or "client" in str(e).lower()
+
+
+def test_publish_to_x_raises_when_no_access_token(monkeypatch, tmp_path):
+    import clipping_tools.publish.x as xmod
+    from clipping_tools.db import init_db
+
+    monkeypatch.setenv("X_CLIENT_ID", "cid")
+    monkeypatch.setenv("X_CLIENT_SECRET", "csec")
+    monkeypatch.delenv("X_ACCESS_TOKEN", raising=False)
+
+    db = os.path.join(tmp_path, "state.db")
+    conn = init_db(db)
+    conn.execute("INSERT INTO posts(id,render_id,caption,status) VALUES(16,1,'x','rendered')")
+    conn.commit(); conn.close()
+
+    try:
+        publish_to_x(16, db, "/tmp/v.mp4")
+        assert False, "should have raised"
+    except RuntimeError as e:
+        assert "token" in str(e).lower() or "authorization" in str(e).lower()

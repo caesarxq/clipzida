@@ -56,9 +56,10 @@ def doctor() -> None:
         ok = ok and p.exists()
     tw = bool(os.environ.get("TWITCH_CLIENT_ID") and os.environ.get("TWITCH_CLIENT_SECRET"))
     checks.append(("twitch credentials (env)", tw, "set" if tw else "not set — needed for live ingest"))
-    xk = bool(os.environ.get("X_API_KEY") and os.environ.get("X_API_SECRET"))
+    xk = bool(os.environ.get("X_CLIENT_ID") and os.environ.get("X_CLIENT_SECRET"))
     xa = bool(os.environ.get("X_ACCESS_TOKEN") and os.environ.get("X_ACCESS_TOKEN_SECRET"))
-    checks.append(("X credentials (env)", xk and xa, "set" if xk and xa else "not set — needed for X publishing"))
+    checks.append(("X credentials (env)", xk and xa,
+                   "set" if xk and xa else "not set — need X_CLIENT_ID/X_CLIENT_SECRET + X_ACCESS_TOKEN"))
     for name, passed, detail in checks:
         mark = "OK " if passed else "!! "
         typer.echo(f"[{mark}] {name:28s} {detail}")

@@ -1,24 +1,32 @@
 """X (Twitter) v2 publish adapter.
-Hybrid media upload: v1.1 chunked upload (INIT/APPEND/FINALIZE) then
-v2 POST /2/tweets with media_ids. OAuth 1.0a user context (implemented
-manually to avoid the requests_oauthlib dependency).
+OAuth 2.0 with PKCE + hybrid media upload (v2 media upload -> v2 POST /2/tweets).
+
+Credentials (env vars):
+- X_CLIENT_ID — OAuth 2.0 client ID
+- X_CLIENT_SECRET — OAuth 2.0 client secret
+- X_ACCESS_TOKEN — bearer token (from OAuth flow, stored in DB tokens table)
+- X_ACCESS_TOKEN_SECRET — refresh token (stored in DB tokens table)
+
+Endpoints:
+- OAuth token: POST https://api.x.com/2/oauth2/token
+- Media upload: POST https://api.x.com/2/media/upload (INIT/APPEND/FINALIZE)
+- Tweet create: POST https://api.x.com/2/tweets
 """
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
 import os
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import httpx
 
 from ..db import utcnow
 
-MEDIA_UPLOAD = "https://upload.twitter.com/1.1/media/upload.json"
+MEDIA_UPLOAD = "https://api.x.com/2/media/upload"
 TWEET_CREATE = "https://api.x.com/2/tweets"
+TOKEN_URL = "https://api.x.com/2/oauth2/token"
 
 
 def _http_post(transport, url: str, **kwargs):
@@ -53,83 +61,89 @@ def build_post_metadata(post: dict) -> dict:
     return {"text": text}
 
 
-# ── OAuth 1.0a (manual, no requests_oauthlib dependency) ──────────────
-
-def _oauth_header(method: str, url: str, params: dict[str, str]) -> str:
-    """Build an OAuth 1.0a Authorization header."""
-    consumer_key = os.environ["X_API_KEY"]
-    consumer_secret = os.environ["X_API_SECRET"]
-    token = os.environ["X_ACCESS_TOKEN"]
-    token_secret = os.environ["X_ACCESS_TOKEN_SECRET"]
-
-    oauth_params = {
-        "oauth_consumer_key": consumer_key,
-        "oauth_nonce": _nonce(),
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": str(int(time.time())),
-        "oauth_token": token,
-        "oauth_version": "1.0",
-    }
-    # Merge request params for signing
-    all_params = {**oauth_params, **params}
-    base_string = _signature_base_string(method, url, all_params)
-    signing_key = _encode(consumer_secret) + "&" + _encode(token_secret)
-    signature = base64.b64encode(
-        hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
-    ).decode()
-    oauth_params["oauth_signature"] = signature
-
-    parts = [f'{_encode(k)}="{_encode(v)}"' for k, v in sorted(oauth_params.items())]
-    return "OAuth " + ", ".join(parts)
-
-
-def _nonce() -> str:
-    return base64.b64encode(os.urandom(18)).decode()[:32]
-
-
-def _encode(s: str) -> str:
-    """RFC 3986 percent-encode."""
-    import urllib.parse
-    return urllib.parse.quote(s, safe="")
-
-
-def _signature_base_string(method: str, url: str, params: dict[str, str]) -> str:
-    import urllib.parse
-    encoded_params = "&".join(
-        f"{_encode(k)}={_encode(v)}" for k, v in sorted(params.items())
-    )
-    return (
-        f"{method.upper()}&{_encode(url)}&{_encode(encoded_params)}"
-    )
-
+# ── OAuth 2.0 helpers ───────────────────────────────────────────────
 
 def _require_env() -> None:
-    missing = [k for k in ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET")
-               if not os.environ.get(k)]
+    missing = [k for k in ("X_CLIENT_ID", "X_CLIENT_SECRET") if not os.environ.get(k)]
     if missing:
         raise RuntimeError(f"X credentials missing: {', '.join(missing)}")
 
 
-def init_media_upload(video_path: str, size: int, *,
+def _get_access_token(conn) -> str:
+    """Get a valid X access token from the DB tokens table, refreshing if needed.
+
+    Falls back to X_ACCESS_TOKEN env var if no DB row exists.
+    """
+    row = conn.execute(
+        "SELECT access_token, refresh_token, expires_at FROM tokens WHERE service='x'"
+    ).fetchone()
+    if row and row["expires_at"]:
+        expires = datetime.fromisoformat(row["expires_at"])
+        if datetime.now(timezone.utc) < expires:
+            return row["access_token"]
+    # Try refresh
+    if row and row["refresh_token"]:
+        return _refresh_token(conn, row["refresh_token"])
+    # Fall back to env var
+    token = os.environ.get("X_ACCESS_TOKEN")
+    if token:
+        return token
+    raise RuntimeError(
+        "X access token not found — complete OAuth 2.0 authorization flow first "
+        "(see docs/X_SETUP_GUIDE.md)"
+    )
+
+
+def _refresh_token(conn, refresh_token: str) -> str:
+    """Refresh an expired X access token using the refresh token."""
+    client_id = os.environ["X_CLIENT_ID"]
+    client_secret = os.environ["X_CLIENT_SECRET"]
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    resp = httpx.post(TOKEN_URL, data=data, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    conn.execute(
+        "UPDATE tokens SET access_token=?, refresh_token=?, expires_at=? WHERE service='x'",
+        (
+            data["access_token"],
+            data.get("refresh_token", refresh_token),
+            _expires_at(data.get("expires_in")),
+        ),
+    )
+    conn.commit()
+    return data["access_token"]
+
+
+def _expires_at(seconds: int | None) -> str | None:
+    if not seconds:
+        return None
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
+
+
+# ── Media upload (hybrid v2: INIT → APPEND → FINALIZE) ────────────────
+
+def init_media_upload(video_path: str, size: int, access_token: str, *,
                       transport=None) -> str:
     """INIT step: register the upload, returns media_id."""
-    _require_env()
     params = {
         "command": "INIT",
         "media_type": "video/mp4",
         "total_bytes": str(size),
         "media_category": "tweet_video",
     }
-    headers = {"Authorization": _oauth_header("POST", MEDIA_UPLOAD, params)}
+    headers = {"Authorization": f"Bearer {access_token}"}
     resp = _http_post(transport, MEDIA_UPLOAD, data=params, headers=headers, timeout=60)
     resp.raise_for_status()
     return str(resp.json()["media_id"])
 
 
 def append_media_chunk(video_path: str, media_id: str, segment: int, *,
-                       transport=None) -> None:
+                       access_token: str, transport=None) -> None:
     """APPEND step: send one chunk of the media file (4 MB chunks)."""
-    _require_env()
     with open(video_path, "rb") as fh:
         fh.seek(segment * 4 * 1024 * 1024)
         chunk = fh.read(4 * 1024 * 1024)
@@ -138,18 +152,17 @@ def append_media_chunk(video_path: str, media_id: str, segment: int, *,
         "media_id": media_id,
         "segment_index": str(segment),
     }
-    headers = {"Authorization": _oauth_header("POST", MEDIA_UPLOAD, params)}
+    headers = {"Authorization": f"Bearer {access_token}"}
     files = {"media": (os.path.basename(video_path), chunk, "video/mp4")}
     resp = _http_post(transport, MEDIA_UPLOAD, data=params, files=files, headers=headers, timeout=300)
     resp.raise_for_status()
 
 
-def finalize_media(media_id: str, *,
+def finalize_media(media_id: str, access_token: str, *,
                    transport=None) -> str:
     """FINALIZE step: signal upload complete, wait for processing, return media_id."""
-    _require_env()
     params = {"command": "FINALIZE", "media_id": media_id}
-    headers = {"Authorization": _oauth_header("POST", MEDIA_UPLOAD, params)}
+    headers = {"Authorization": f"Bearer {access_token}"}
     resp = _http_post(transport, MEDIA_UPLOAD, data=params, headers=headers, timeout=60)
     resp.raise_for_status()
     result = resp.json()
@@ -164,25 +177,28 @@ def finalize_media(media_id: str, *,
         check_after = info.get("check_after_secs", 1)
         time.sleep(min(check_after, 5))
         status_params = {"command": "STATUS", "media_id": media_id}
-        status_headers = {"Authorization": _oauth_header("GET", MEDIA_UPLOAD, status_params)}
+        status_headers = {"Authorization": f"Bearer {access_token}"}
         resp = _http_get(transport, MEDIA_UPLOAD, params=status_params, headers=status_headers, timeout=30)
         resp.raise_for_status()
         result = resp.json()
     raise RuntimeError("media processing timed out")
 
 
-def create_post(text: str, media_ids: list[str], *,
+# ── Create post ──────────────────────────────────────────────────────
+
+def create_post(text: str, media_ids: list[str], access_token: str, *,
                 transport=None) -> dict:
     """POST /2/tweets with optional media attachment."""
-    _require_env()
     payload: dict[str, Any] = {"text": text}
     if media_ids:
         payload["media"] = {"media_ids": media_ids}
-    headers = {"Authorization": _oauth_header("POST", TWEET_CREATE, {})}
+    headers = {"Authorization": f"Bearer {access_token}"}
     resp = _http_post(transport, TWEET_CREATE, json=payload, headers=headers, timeout=60)
     resp.raise_for_status()
     return resp.json()["data"]
 
+
+# ── Full flow ────────────────────────────────────────────────────────
 
 def publish_to_x(post_id: int, db_path, video_path: str, *,
                  transport=None) -> dict:
@@ -196,17 +212,19 @@ def publish_to_x(post_id: int, db_path, video_path: str, *,
     post_dict = dict(post)
     md = build_post_metadata(post_dict)
     size = os.path.getsize(video_path)
-    media_id = init_media_upload(video_path, size, transport=transport)
+    token = _get_access_token(conn)
+    media_id = init_media_upload(video_path, size, token, transport=transport)
     # APPEND in 4 MB chunks
     segment = 0
     offset = 0
     with open(video_path, "rb") as fh:
         while offset < size:
-            append_media_chunk(video_path, media_id, segment, transport=transport)
+            append_media_chunk(video_path, media_id, segment, access_token=token,
+                               transport=transport)
             segment += 1
             offset += 4 * 1024 * 1024
-    finalize_media(media_id, transport=transport)
-    created = create_post(md["text"], [media_id], transport=transport)
+    finalize_media(media_id, token, transport=transport)
+    created = create_post(md["text"], [media_id], token, transport=transport)
     ext = str(created["id"])
     url = f"https://x.com/i/status/{ext}"
     with conn:
