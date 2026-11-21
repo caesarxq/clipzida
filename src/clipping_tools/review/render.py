@@ -327,7 +327,7 @@ def build_enhanced_filter(ass_path: Path, hook: str,
 
     # Audio chain: voice + music bed + SFX
     af_parts = []
-    amix_inputs = "0:a"
+    amix_inputs = "[0:a]"
     amix_count = 1
 
     if music_path:
