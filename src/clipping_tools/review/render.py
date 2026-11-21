@@ -190,7 +190,17 @@ def select_hook_moment(words: list[dict], peaks: list[dict],
 
     start = max(0.0, best_start)
     end = min(start + duration, words[-1]["end"])
-    return {"start": round(start, 2), "end": round(end, 2)}
+    # Identify the best hook word within the window (highest _word_score)
+    hook_word = ""
+    hook_word_score = -1.0
+    for w in words:
+        wt = float(w.get("start", 0))
+        if start <= wt <= end:
+            ws = _word_score(w, peaks)
+            if ws > hook_word_score:
+                hook_word_score = ws
+                hook_word = str(w.get("word", ""))
+    return {"start": round(start, 2), "end": round(end, 2), "hook_word": hook_word}
 
 
 def _wrap_word(word: str, start: float, end: float, max_chars: int = 24) -> list[dict]:
@@ -237,8 +247,21 @@ def _ass_style(name: str, fontsize: int, primary: str, secondary: str,
             f"&H00000000,&H80000000,{bold},0,0,0,100,100,0,0,1,4,0,2,60,60,560,1")
 
 
-def make_enhanced_ass(words: list[dict], ass_path: Path, hook: str) -> None:
-    """ASS captions with emphasis pops, emoji mapping, and bounce animation."""
+def make_enhanced_ass(words: list[dict], ass_path: Path, hook: str,
+                      moment: dict | None = None) -> None:
+    """ASS captions with karaoke word-by-word highlight, bottom-third placement.
+
+    Each word gets its own Dialogue line with exact start/end timing.
+    The active word uses Emphasis style; only max 2 lines visible at once.
+    Filtered to the hook moment window when provided.
+    """
+    # Filter words to hook moment window if provided
+    if moment:
+        ws = float(moment.get("start", 0))
+        we = float(moment.get("end", 0))
+        words = [w for w in words
+                 if ws <= float(w.get("start", 0)) < we]
+
     header = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n"
         "WrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
@@ -246,8 +269,8 @@ def make_enhanced_ass(words: list[dict], ass_path: Path, hook: str) -> None:
         "SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, "
         "StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, "
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        f"{_ass_style('Default', 56, NORMAL_COLOR, EMPHASIS_COLOR)}\n"
-        f"{_ass_style('Emphasis', 66, EMPHASIS_COLOR, NORMAL_COLOR, bold=1)}\n\n"
+        f"{_ass_style('Default', 50, NORMAL_COLOR, EMPHASIS_COLOR)}\n"
+        f"{_ass_style('Emphasis', 52, EMPHASIS_COLOR, NORMAL_COLOR, bold=1)}\n"
         "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, "
         "MarginV, Effect, Text\n"
     )
@@ -265,46 +288,34 @@ def make_enhanced_ass(words: list[dict], ass_path: Path, hook: str) -> None:
     # Apply emphasis markers
     units = wrap_emphasis(units)
 
-    # Group into caption lines (character budget)
-    lines_units, cur, cur_len = [], [], 0
-    for u in units:
-        n = len(u["word"])
-        if cur and cur_len + n + 1 > 28:
-            lines_units.append(cur)
-            cur, cur_len = [], 0
-        cur.append(u)
-        cur_len += n + (1 if cur_len else 0)
-    if cur:
-        lines_units.append(cur)
+    # Prevent overlap: trim each word's end to the next word's start
+    # so max 1 caption line is visible at a time (well under the 2-line cap)
+    for i in range(len(units) - 1):
+        next_start = units[i + 1]["start"]
+        if units[i]["end"] > next_start:
+            units[i]["end"] = next_start
 
+    # Build karaoke dialogue: one line per word, exact timing.
+    # Every word uses Emphasis style — it's the "active" word during its window.
     lines = []
-    for group in lines_units:
-        for idx, w in enumerate(group):
-            parts = []
-            for j, gw in enumerate(group):
-                txt = gw["word"].replace("{", "").replace("}", "")
-                emoji = map_emoji(txt)
-                display = txt + (" " + emoji if emoji and j == idx else "")
-                style_name = "Emphasis" if gw.get("emph") else "Default"
-                # Bounce animation on emphasis word: \t(start,end,fontsize)
-                if gw.get("emph"):
-                    parts.append(
-                        f"{{\\c&H0000FFFF&}}{{\\t(0,50,\\fs74)}}"
-                        f"{display.upper()}{{\\c&H00FFFFFF&}}"
-                    )
-                else:
-                    parts.append(display)
-            lines.append(
-                f"Dialogue: 0,{ts(w['start'])},{ts(max(w['end'], w['start']+0.08))},"
-                f"{style_name},,0,0,0,,{' '.join(parts)}"
-            )
-    ass_path.write_text(header + "\n".join(lines) + "\n")
+    for u in units:
+        w = u["word"].replace("{", "").replace("}", "")
+        emoji = map_emoji(w)
+        display = w + (" " + emoji if emoji else "")
+        # Karaoke: each word is emphasized during its own time window
+        lines.append(
+            f"Dialogue: 0,{ts(u['start'])},{ts(u['end'])},"
+            f"Emphasis,,0,0,700,,{display}"
+        )
 
+    ass_path.write_text(header + "\n".join(lines) + "\n")
 
 def build_enhanced_filter(ass_path: Path, hook: str,
                           music_path: str | None = None,
                           sfx_events: list[dict] | None = None,
-                          meme_events: list[dict] | None = None
+                          meme_events: list[dict] | None = None,
+                          start: float | None = None,
+                          end: float | None = None
                           ) -> tuple[str, str]:
     """Build video + audio filtergraphs.
 
@@ -313,9 +324,14 @@ def build_enhanced_filter(ass_path: Path, hook: str,
     font = font_path()
     hook_esc = hook.replace("'", "\\u2019").replace(":", "\\:")
 
+    # Optional trim to hook moment window
+    trim = ""
+    if start is not None and end is not None:
+        trim = f"trim=start={start}:end={end},setpts=PTS-STARTPTS,"
+
     # Video chain: gaming-split layout
     vf = (
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
+        f"[0:v]{trim}scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
         "boxblur=20:5,eq=brightness=-0.06[bg];"
         "[0:v]scale=1080:-2[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
@@ -491,8 +507,8 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
     words = transcribe(wav)
     peaks = energy_peaks(wav)
     moment = select_hook_moment(words, peaks)
-    hook = (words[0]["word"] if words else clip["title"] or "GTA 6 MOMENT")[:24].upper()
-    make_enhanced_ass(words, ass, hook)
+    hook = (moment.get("hook_word") or clip["title"] or "GTA 6 MOMENT")[:24].upper()
+    make_enhanced_ass(words, ass, hook, moment=moment)
     # Collect asset paths
     assets = ASSETS_DIR
     music = assets / "audio" / "music_bed.mp3"
@@ -514,7 +530,8 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
     info = render(src, out, ass, hook,
                   music_path=str(music) if music.exists() else None,
                   sfx_events=[e for e in sfx_events if Path(e.get("file", "")).exists()],
-                  meme_events=[e for e in meme_events if Path(e.get("file", "")).exists()])
+                  meme_events=[e for e in meme_events if Path(e.get("file", "")).exists()],
+                  start=moment["start"], end=moment["end"])
     proxy_path = make_proxy(out)
     with conn:
         render_id = _replace_render(conn, clip["id"], "vertical-1080x1920", str(out))
@@ -527,7 +544,7 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
                      (render_id, post_id))
     return {"post_id": post_id, "render_id": render_id, "path": str(out),
             "proxy_path": str(proxy_path) if proxy_path else None,
-            "probe": info}
+            "moment": moment, "probe": info}
 
 
 def init_db_for_path(path: str | Path):

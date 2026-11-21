@@ -37,4 +37,4 @@ def test_caption_font_is_reduced_from_68(tmp_path):
     ass = tmp_path / "c.ass"
     make_enhanced_ass(words, ass, "TEST HOOK")
     style = [l for l in ass.read_text().splitlines() if l.startswith("Style:")][0]
-    assert ",56," in style and ",68," not in style
+    assert ",50," in style and ",68," not in style

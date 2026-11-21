@@ -31,7 +31,7 @@ def test_render_post_creates_proxy(monkeypatch, tmp_path):
     monkeypatch.setattr(render_mod, "transcribe", lambda wav: [{"word": "hook", "start": 0.0, "end": 1.0}])
     monkeypatch.setattr(render_mod, "energy_peaks", lambda wav: [])
     monkeypatch.setattr(render_mod, "render", lambda src, out, ass, hook, **kwargs: {"streams": []})
-    monkeypatch.setattr(render_mod, "make_enhanced_ass", lambda words, p, hook=None: Path(p).write_text("ass"))
+    monkeypatch.setattr(render_mod, "make_enhanced_ass", lambda words, p, hook=None, moment=None: Path(p).write_text("ass"))
     monkeypatch.setattr(render_mod, "WORK", Path(d))
 
     with patch.object(render_mod, "make_proxy",
