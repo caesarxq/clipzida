@@ -225,28 +225,35 @@ def detect_segments(words: list[dict], peaks: list[dict],
 def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
     """Build ffmpeg filter fragments for one segment from [0:v].
 
-    Returns a list of filter-chain strings, each ending with [fv{N}] label.
-    Caller joins them with ';'.
+    Returns a list of filter-chain strings (joined by ';' by caller).
+    Each chain ends with [fv{N}_bg] and [fv{N}_fg] labels via split=2.
     """
     start = seg["start"]
     end = seg["end"]
     seg_type = seg.get("type", "normal")
 
-    fragments = [f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[fv{seg_idx}]"]
+    # Base trim chain, ends with a pre-split label
+    pre = f"[fv{seg_idx}_pre]"
+    base = f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS{pre}"
 
     if seg_type == "zoom":
         # Zoom in during the segment: 1.0x -> 1.3x
-        fragments.append(
-            f"[fv{seg_idx}]zoompan=z='min(zoom+0.01,1.3)':d=25[fv{seg_idx}]"
-        )
+        zoom = f"{pre}zoompan=z='min(zoom+0.01,1.3)':d=25[fv{seg_idx}_zoomed]"
+        split = f"[fv{seg_idx}_zoomed]split=2[fv{seg_idx}_bg][fv{seg_idx}_fg]"
+        return [base, zoom, split]
     elif seg_type == "flash":
         # White flash overlay at segment start
-        fragments.append(
-            f"color=c=white:s=1080x1920:d=0.05[f{seg_idx}_flash];"
-            f"[fv{seg_idx}][f{seg_idx}_flash]overlay=enable='eq(t,{start})'[fv{seg_idx}]"
+        flash = (
+            f"color=c=white:s=1080x1920:d=0.05[fv{seg_idx}_flash];"
+            f"{pre}[fv{seg_idx}_flash]overlay=enable='eq(t,{start})'"
+            f"[fv{seg_idx}_merged]"
         )
-
-    return fragments
+        split = f"[fv{seg_idx}_merged]split=2[fv{seg_idx}_bg][fv{seg_idx}_fg]"
+        return [base, flash, split]
+    else:
+        # Normal segment: just split
+        split = f"{pre}split=2[fv{seg_idx}_bg][fv{seg_idx}_fg]"
+        return [base, split]
 
 
 def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
@@ -262,10 +269,9 @@ def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
         seg_fragments = build_segment_filter(seg, 0)
         vf = (
             ";".join(seg_fragments) + ";"
-            f"[fv0]scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"[fv0_bg]scale=1080:1920:force_original_aspect_ratio=increase,"
             f"crop=1080:1920,boxblur=20:5,eq=brightness=-0.06[bg];"
-            f"[0:v]trim=start={seg['start']}:end={seg['end']},"
-            f"setpts=PTS-STARTPTS,scale=1080:-2[fg];"
+            f"[fv0_fg]scale=1080:-2[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
             f"[base]subtitles={ass_path}[cap];"
             f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
@@ -276,15 +282,15 @@ def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
         all_fragments = []
         for i, seg in enumerate(segs):
             all_fragments.extend(build_segment_filter(seg, i))
-        concat_inputs = "".join([f"[fv{i}]" for i in range(len(segs))])
+        bg_inputs = "".join([f"[fv{i}_bg]" for i in range(len(segs))])
+        fg_inputs = "".join([f"[fv{i}_fg]" for i in range(len(segs))])
         vf = ";".join(all_fragments)
         # Concat once for background (blurred + scaled), once for foreground
-        # Chain directly after concat with ',' to avoid cross-semicolon label issues
         vf += (
-            f";{concat_inputs}concat=n={len(segs)}:v=1:a=0,"
+            f";{bg_inputs}concat=n={len(segs)}:v=1:a=0,"
             f"scale=1080:1920:force_original_aspect_ratio=increase,"
             f"crop=1080:1920,boxblur=20:5,eq=brightness=-0.06[bg];"
-            f"{concat_inputs}concat=n={len(segs)}:v=1:a=0,scale=1080:-2[fg];"
+            f"{fg_inputs}concat=n={len(segs)}:v=1:a=0,scale=1080:-2[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
             f"[base]subtitles={ass_path}[cap];"
             f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
