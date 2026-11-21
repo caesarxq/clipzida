@@ -410,7 +410,9 @@ def _flash_filter(durations: list[float]) -> str:
 def render(src: Path, out: Path, ass_path: Path, hook: str,
            music_path: str | None = None,
            sfx_events: list[dict] | None = None,
-           meme_events: list[dict] | None = None) -> dict:
+           meme_events: list[dict] | None = None,
+           start: float | None = None,
+           end: float | None = None) -> dict:
     """Full enhanced render for an approved post.
 
     Adds:
@@ -419,7 +421,7 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
     - Meme/reaction PNG overlays at event timestamps
     - Dynamic emphasis via ASS captions
     """
-    vf, af = build_enhanced_filter(ass_path, hook, music_path, sfx_events, meme_events)
+    vf, af = build_enhanced_filter(ass_path, hook, music_path, sfx_events, meme_events, start=start, end=end)
 
     # Build input list
     inputs = ["-i", str(src)]
