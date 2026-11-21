@@ -102,7 +102,22 @@ class EditCaptionModal(discord.ui.Modal, title="Edit caption"):
         decide([str(r.id) for r in interaction.user.roles], self.reviewer_role, "approve",
                self.post_id, str(interaction.user.id),
                edits={"caption": str(self.caption.value)}, conn=init_db(self.db_path))
-        await interaction.response.send_message("Caption updated and approved.", ephemeral=True)
+        caption = str(self.caption.value)
+        await interaction.response.send_message(f"Post #{self.post_id}: caption updated and approved.", ephemeral=True)
+        emoji = "✏️"
+        embed = discord.Embed(
+            title=f"{emoji} APPROVED (EDITED) — Post #{self.post_id}",
+            description=(
+                f"Caption: {caption[:200]}\n"
+                f"Edited by: {interaction.user.id}\n"
+                f"Decided at: {utcnow()}"
+            ),
+            color=discord.Color.green(),
+        )
+        try:
+            await interaction.message.edit(embeds=[embed], view=None)
+        except Exception:
+            pass
 
 
 def parse_component(custom_id: str) -> tuple[str, int] | None:
