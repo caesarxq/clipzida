@@ -1,14 +1,15 @@
-# CLIPZIDA — X (Twitter) Publishing Setup Guide
+# CLIPZIDA — X (Twitter) Publishing Setup Guide (OAuth 2.0)
 
-This guide walks you through configuring the X/Twitter publish adapter so the CLIPZIDA
-pipeline can post GTA 6 clips to X automatically.
+X uses **OAuth 2.0 with PKCE**, not OAuth 1.0a. This guide walks you through
+configuring the X publish adapter so the CLIPZIDA pipeline can post GTA 6 clips
+to X automatically.
 
 ---
 
 ## 1. Create a X Developer Account
 
 1. Go to https://developer.x.com/ and sign in with your X account.
-2. Apply for a developer account if you don't have one (instant approval for most).
+2. Apply for a developer account if you don't have one.
 3. Once approved, you'll access the **Developer Portal** at https://developer.x.com/en/portal.
 
 ---
@@ -22,35 +23,87 @@ X API v2 requires your app to be inside a **Project**:
 3. Select a use case (e.g., "Student / personal project").
 4. Inside the project, click **Create App**.
 5. Give the app a name (e.g., "clipzida-x-publisher").
-6. The portal will display your **API Key** and **API Secret** — copy these somewhere safe.
+6. The portal will display your **Client ID** and **Client Secret** — copy these somewhere safe.
 
 ---
 
-## 3. Generate User Access Tokens (OAuth 1.0a)
+## 3. Configure OAuth 2.0 Settings
 
-X publishing requires **user context** tokens, not app-only tokens:
+In your app's settings in the Developer Portal:
 
-1. In your app's settings, go to **Keys and Tokens**.
-2. Under **Authentication tokens**, click **Create** next to **Access Token & Secret**.
-3. You'll get:
-   - **Access Token** (oauth_token)
-   - **Access Token Secret** (oauth_token_secret)
-4. Copy all four values: API Key, API Secret, Access Token, Access Token Secret.
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Callback URI / Redirect URI** | `https://clipzida.com/callback/x` or `http://localhost:8765/callback/x` | Where X redirects after user authorization |
+| **App type** | Web App | Required for OAuth 2.0 |
+| **App permissions** | Read + Write | Needed to post tweets and upload media |
+| **Enable OAuth 2.0** | Checked | Must be enabled for bearer token auth |
 
-> **Note:** Tokens do not auto-expire. They remain valid until revoked.
+Save the changes. The app will generate a **Client ID** (public) and **Client Secret** (keep secret).
 
 ---
 
-## 4. Set Environment Variables on the VPS
+## 4. Complete OAuth 2.0 Authorization Flow
+
+To get an initial access token + refresh token, complete the OAuth 2.0 Authorization Code Flow with PKCE:
+
+### Step A: Generate PKCE Code Verifier & Challenge
+
+```python
+import base64, hashlib, os
+
+code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode()
+code_challenge = base64.urlsafe_b64encode(
+    hashlib.sha256(code_verifier.encode()).digest()
+).rstrip(b"=").decode()
+```
+
+### Step B: Direct User to Authorization URL
+
+Open this URL in a browser (you're authorizing the CLIPZIDA X account):
+
+```
+https://twitter.com/i/oauth2/authorize
+?response_type=code
+&client_id=YOUR_CLIENT_ID
+&redirect_uri=https://clipzida.com/callback/x
+&scope=tweet.read tweet.write users.read media.write
+&state=random_state_string
+&code_challenge=CODE_CHALLENGE
+&code_challenge_method=S256
+```
+
+### Step C: Exchange Authorization Code for Tokens
+
+After the user authorizes, X redirects to your callback URI with a `?code=...` parameter. Exchange it:
+
+```http
+POST https://api.x.com/2/oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+code=AUTHORIZATION_CODE
+redirect_uri=https://clipzida.com/callback/x
+client_id=YOUR_CLIENT_ID
+code_verifier=CODE_VERIFIER
+```
+
+Response includes:
+- `access_token` — bearer token for API calls
+- `refresh_token` — use to get new access tokens when they expire
+- `expires_in` — seconds until access token expires (typically 7200 = 2 hours)
+
+---
+
+## 5. Set Environment Variables on the VPS
 
 Add these to `/home/clipzida/clipping_tools/.env` on the VPS:
 
 ```bash
-# X (Twitter) API credentials
-X_API_KEY=your_api_key_here
-X_API_SECRET=your_api_secret_here
-X_ACCESS_TOKEN=your_access_token_here
-X_ACCESS_TOKEN_SECRET=your_access_token_secret_here
+# X (Twitter) OAuth 2.0 credentials
+X_CLIENT_ID=your_client_id_here
+X_CLIENT_SECRET=your_client_secret_here
+X_ACCESS_TOKEN=your_access_token_here          # initial bearer token
+X_ACCESS_TOKEN_SECRET=your_refresh_token_here  # refresh token
 ```
 
 You can set them via SSH:
@@ -59,16 +112,20 @@ You can set them via SSH:
 ssh -i ~/.ssh/clipzida_vps_ed25519 clipzida@169.58.182.213
 cd ~/clipping_tools
 
-# Append to .env
-echo "X_API_KEY=your_api_key_here" >> .env
-echo "X_API_SECRET=your_api_secret_here" >> .env
+echo "X_CLIENT_ID=your_client_id_here" >> .env
+echo "X_CLIENT_SECRET=your_client_secret_here" >> .env
 echo "X_ACCESS_TOKEN=your_access_token_here" >> .env
-echo "X_ACCESS_TOKEN_SECRET=your_access_token_secret_here" >> .env
+echo "X_ACCESS_TOKEN_SECRET=your_refresh_token_here" >> .env
 ```
+
+The adapter will:
+1. Check the DB `tokens` table first for a valid (non-expired) access token
+2. Auto-refresh using the refresh token when expired
+3. Fall back to the `X_ACCESS_TOKEN` env var if no DB row exists
 
 ---
 
-## 5. Add X to Publish Targets
+## 6. Add X to Publish Targets
 
 Edit `/home/clipzida/clipping_tools/config/pipeline.yaml` and add `x` to the publish targets:
 
@@ -95,7 +152,7 @@ No changes needed there unless you want to adjust the warmup ramp.
 
 ---
 
-## 6. Restart the Pipeline Cycle
+## 7. Restart the Pipeline Cycle
 
 After adding X to targets and setting env vars, restart the cycle service so it picks up the new target:
 
@@ -107,7 +164,7 @@ The pipeline will now attempt to publish each approved clip to **both YouTube an
 
 ---
 
-## 7. Verify It Works
+## 8. Verify It Works
 
 Run a manual cycle to test:
 
@@ -125,7 +182,20 @@ ssh -i ~/.ssh/clipzida_vps_ed25519 root@169.58.182.213 'su - clipzida -c "cd ~/c
 
 ---
 
-## 8. Rate Limits & Warmup
+## 9. Token Refresh (Automatic)
+
+Access tokens expire after ~2 hours. The adapter handles this automatically:
+
+1. Before each publish, it checks `tokens.expires_at` in the DB
+2. If expired, it calls `POST https://api.x.com/2/oauth2/token` with `grant_type=refresh_token`
+3. The new access token + refresh token are stored back in the DB
+4. Publishing continues with the fresh token
+
+No manual intervention needed as long as the refresh token remains valid (X refresh tokens are long-lived but can be revoked).
+
+---
+
+## 10. Rate Limits & Warmup
 
 | Limit | Value |
 |-------|-------|
@@ -146,16 +216,17 @@ Start conservatively and increase `planned_per_day` as the account ages.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `401 Unauthorized` | Invalid API key/secret or token | Regenerate keys in X Developer Portal |
-| `403 Forbidden` | App not in a Project | Move app into a Project in Developer Portal |
+| `401 Unauthorized` | Invalid client ID/secret or expired/refresh token | Regenerate keys in X Developer Portal, re-run OAuth flow |
+| `403 Forbidden` | App permissions don't include `tweet.write` or `media.write` | Update app permissions in Developer Portal |
 | `429 Too Many Requests` | Rate limit hit | Wait for window reset, reduce posting frequency |
-| `X credentials missing` | Env vars not set | Add all 4 X env vars to `.env` |
-| Media processing failed | Invalid video format | Ensure MP4 with H.264 + AAC |
+| `X credentials missing` | `X_CLIENT_ID` / `X_CLIENT_SECRET` not set | Add both env vars to `.env` |
+| `X access token not found` | No access token in DB or env | Complete OAuth 2.0 authorization flow first |
 
 ---
 
 ## Files Changed
 
-- `src/clipping_tools/publish/x.py` — new X publish adapter (OAuth 1.0a + v1.1 media upload + v2 tweet create)
-- `src/clipping_tools/cli.py` — added X to `_publish` dispatch + X credentials to `doctor` check
-- `tests/test_publish_x.py` — 8 new TDD tests (metadata, media init/append/finalize, create post, full flow, missing credentials)
+- `src/clipping_tools/publish/x.py` — X publish adapter (OAuth 2.0 bearer auth + v2 media upload + v2 tweet create)
+- `src/clipping_tools/cli.py` — X credentials check in `doctor` updated to OAuth 2.0 env vars
+- `tests/test_publish_x.py` — 9 TDD tests (metadata, media init/append/finalize, create post, full flow, missing credentials)
+- `docs/X_SETUP_GUIDE.md` — This setup guide
