@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -189,7 +190,7 @@ def review_publish() -> None:
 
 
 @app.command()
-def monitor(db_path: str | Path | None = None) -> None:
+def monitor(db_path: Optional[str] = None) -> None:
     """Run pipeline health checks and post alerts to Discord."""
     monitor_mod.monitor(db_path=db_path)
 

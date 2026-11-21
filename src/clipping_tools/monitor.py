@@ -12,7 +12,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -234,7 +234,7 @@ def post_alerts_to_discord(
 # ── CLI command ────────────────────────────────────────────────────────────
 
 def monitor(
-    db_path: str | Path = None,
+    db_path: Optional[str | Path] = None,
     alerts_channel: str | None = None,
     post_alerts: bool = True,
 ) -> None:
