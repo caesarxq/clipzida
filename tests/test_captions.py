@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-from clipping_tools.review.render import make_ass
+from clipping_tools.review.render import make_enhanced_ass
 
 
 def _dialogue_lines(path: Path) -> list[str]:
@@ -18,7 +18,7 @@ def test_long_segment_is_wrapped_into_short_lines(tmp_path):
     words = [{"word": "this is a very long sentence that should wrap onto several lines",
               "start": 1.0, "end": 3.0}]
     ass = tmp_path / "c.ass"
-    make_ass(words, ass)
+    make_enhanced_ass(words, ass, "TEST HOOK")
     lines = _dialogue_lines(ass)
     assert len(lines) > 1
     for line in lines:
@@ -28,13 +28,13 @@ def test_long_segment_is_wrapped_into_short_lines(tmp_path):
 def test_short_word_stays_single_line(tmp_path):
     words = [{"word": "hello", "start": 0.0, "end": 0.5}]
     ass = tmp_path / "c.ass"
-    make_ass(words, ass)
+    make_enhanced_ass(words, ass, "TEST HOOK")
     assert len(_dialogue_lines(ass)) == 1
 
 
 def test_caption_font_is_reduced_from_68(tmp_path):
     words = [{"word": "hi", "start": 0.0, "end": 0.5}]
     ass = tmp_path / "c.ass"
-    make_ass(words, ass)
+    make_enhanced_ass(words, ass, "TEST HOOK")
     style = [l for l in ass.read_text().splitlines() if l.startswith("Style:")][0]
     assert ",56," in style and ",68," not in style

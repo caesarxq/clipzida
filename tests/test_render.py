@@ -4,25 +4,26 @@ import tempfile
 
 from clipping_tools.db import init_db
 from clipping_tools.review.render import (
-    _replace_render, build_filter, font_path, select_moment, source_clip_for_post,
+    _replace_render, build_enhanced_filter, font_path,
+    select_hook_moment, source_clip_for_post,
 )
 
 
-def test_select_moment_respects_min_and_max_bounds():
+def test_select_hook_moment_respects_min_and_max_bounds():
     words = [{"word": "a", "start": 0.0, "end": 2.0}, {"word": "b", "start": 40.0, "end": 60.0}]
-    m = select_moment(words, target_min=18, target_max=45)
+    m = select_hook_moment(words, [], target_min=18, target_max=45)
     assert m["end"] - m["start"] <= 45.0
     assert m["start"] >= 0.0
 
 
-def test_select_moment_handles_empty_transcript():
-    m = select_moment([])
+def test_select_hook_moment_handles_empty_transcript():
+    m = select_hook_moment([], [], target_min=18, target_max=45)
     assert m["start"] == 0.0 and m["end"] <= 30.0
 
 
-def test_build_filter_is_portable_libx264_friendly():
+def test_build_enhanced_filter_is_portable_libx264_friendly():
     from pathlib import Path
-    vf = build_filter(Path("/tmp/c.ass"), "TEST: HOOK")
+    vf, af = build_enhanced_filter(Path("/tmp/c.ass"), "TEST: HOOK")
     assert "subtitles=" in vf and "drawtext=" in vf
     assert "1080:1920" in vf
     assert font_path().endswith((".ttf", ".otf"))
