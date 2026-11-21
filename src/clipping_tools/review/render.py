@@ -455,7 +455,12 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
         "-movflags", "+faststart", str(out),
     ])
 
-    subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=900)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=900)
+    except subprocess.CalledProcessError as e:
+        import sys as _sys
+        _sys.stderr.write(f"FFMPEG_STDERR:\n{e.stderr}\n")
+        raise
 
     p = subprocess.run([ffprobe_bin(), "-v", "error", "-show_entries",
                         "format=duration,size:stream=codec_name,width,height",
