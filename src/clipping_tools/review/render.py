@@ -278,11 +278,13 @@ def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
             all_fragments.extend(build_segment_filter(seg, i))
         concat_inputs = "".join([f"[fv{i}]" for i in range(len(segs))])
         vf = ";".join(all_fragments)
-        vf += f";{concat_inputs}concat=n={len(segs)}:v=1:a=0[v_concat];"
+        # Concat once for background (blurred + scaled), once for foreground
+        # Chain directly after concat with ',' to avoid cross-semicolon label issues
         vf += (
-            f"[v_concat]scale=1080:1920:force_original_aspect_ratio=increase,"
+            f";{concat_inputs}concat=n={len(segs)}:v=1:a=0,"
+            f"scale=1080:1920:force_original_aspect_ratio=increase,"
             f"crop=1080:1920,boxblur=20:5,eq=brightness=-0.06[bg];"
-            f"[v_concat]scale=1080:-2[fg];"
+            f"{concat_inputs}concat=n={len(segs)}:v=1:a=0,scale=1080:-2[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
             f"[base]subtitles={ass_path}[cap];"
             f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
