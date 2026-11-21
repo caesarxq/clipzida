@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLIPZIDA — GTA 6 Clips</title>
+    <meta name="description" content="CLIPZIDA brings you the best GTA 6 clips, moments, and highlights from across the streaming world. Funny, hype, and news angles — all in one place.">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0b0d12;
+            --card: #11131b;
+            --accent: #7c3aed;
+            --accent-glow: #8b5cf633;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+            --border: #1e293b;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        .container { max-width: 800px; margin: 0 auto; padding: 4rem 1.5rem; }
+        header { text-align: center; margin-bottom: 3rem; }
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.05em;
+            background: linear-gradient(135deg, #a855f7 0%, #22d3ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+            margin-bottom: 0.5rem;
+        }
+        .tagline {
+            font-size: 1.25rem;
+            color: var(--muted);
+            font-weight: 400;
+        }
+        .subtitle {
+            font-size: 0.95rem;
+            color: var(--muted);
+            margin-top: 0.5rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent);
+        }
+        .card h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+        .card p {
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+        .card .icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+        .cta {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #a855f7 0%, #22d3ee 100%);
+            color: #fff;
+            text-decoration: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 2rem 0;
+        }
+        .links {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .links a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .links a:hover { color: var(--text); }
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: var(--muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+        @media (max-width: 480px) {
+            .logo { font-size: 2rem; }
+            .container { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">CLIPZIDA</div>
+            <div class="tagline">GTA 6 Clips & Highlights</div>
+            <div class="subtitle">Funny · Hype · News — the best GTA 6 moments, clipped and posted daily.</div>
+        </header>
+
+        <div class="grid">
+            <div class="card">
+                <span class="icon">🎮</span>
+                <h3>GTA 6 Clips</h3>
+                <p>Automatically clipped moments from the biggest GTA 6 streams and broadcasts.</p>
+            </div>
+            <div class="card">
+                <span class="icon">😂</span>
+                <h3>Funny Moments</h3>
+                <p>Hilarious fails, glitches, and community reactions — curated daily.</p>
+            </div>
+            <div class="card">
+                <span class="icon">🔥</span>
+                <h3>Hype Reels</h3>
+                <p>High-energy clips, clutch plays, and breakout moments.</p>
+            </div>
+            <div class="card">
+                <span class="icon">📰</span>
+                <h3>News & Updates</h3>
+                <p>Rockstar announcements, patches, leaks, and everything GTA 6.</p>
+            </div>
+        </div>
+
+        <div class="cta">
+            <a href="https://github.com/caesarxq/clipzida" class="btn">View on GitHub</a>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="links">
+            <a href="/terms-of-service.html">Terms of Service</a>
+            <span style="color: var(--border);">·</span>
+            <a href="/privacy-policy.html">Privacy Policy</a>
+            <span style="color: var(--border);">·</span>
+            <a href="https://github.com/caesarxq/clipzida">GitHub</a>
+        </div>
+
+        <footer>
+            CLIPZIDA · Autonomous GTA 6 clipping pipeline · Made with ❤️ in Nairobi, Kenya
+        </footer>
+    </div>
+</body>
+</html>
