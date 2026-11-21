@@ -200,6 +200,86 @@ def monitor(db_path: Optional[str] = None) -> None:
 
 
 @app.command()
+def measure(
+    subcommand: str,
+    post_id: Optional[int] = None,
+    views: Optional[int] = None,
+    likes: int = 0,
+    comments: int = 0,
+    shares: int = 0,
+    fetched_at: Optional[str] = None,
+    approved_views: Optional[int] = None,
+    payout: float = 0.0,
+    retention_pct: Optional[float] = None,
+    current_angle: Optional[str] = None,
+) -> None:
+    """Phase 6: Measurement & Optimization — record metrics, check retention,
+    kill underperformers, auto-optimize default angle."""
+    from datetime import datetime, timezone
+    from clipping_tools.review.render import (
+        record_metrics,
+        get_avg_retention,
+        should_kill_underperformer,
+        auto_optimize_angle,
+    )
+    import yaml
+
+    cfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text()).get(
+        "measurement", {}
+    )
+    db_path = ROOT / "data" / "state.db"
+
+    if subcommand == "record":
+        if post_id is None or views is None:
+            raise typer.Exit("measure record requires --post-id and --views")
+        if fetched_at is None:
+            fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        record_metrics(
+            str(db_path), post_id=post_id, views=views, likes=likes,
+            comments=comments, shares=shares, fetched_at=fetched_at,
+            approved_views=approved_views, payout=payout,
+        )
+        typer.echo(f"MEASURE_RECORD post={post_id} views={views} fetched_at={fetched_at}")
+
+    elif subcommand == "retention":
+        avg = get_avg_retention(str(db_path), post_id=post_id)
+        scope = f"post #{post_id}" if post_id is not None else "all posts"
+        typer.echo(f"MEASURE_RETENTION {scope}: {avg}%")
+
+    elif subcommand == "kill":
+        if retention_pct is None or views is None:
+            raise typer.Exit("measure kill requires --retention-pct and --views")
+        threshold = float(cfg.get("retention_threshold", 30.0))
+        min_views = int(cfg.get("min_views_for_kill", 50))
+        kill = should_kill_underperformer(retention_pct, views,
+                                          retention_threshold=threshold,
+                                          min_views=min_views)
+        typer.echo(f"MEASURE_KILL post views={views} retention={retention_pct}% -> {'KILL' if kill else 'KEEP'}")
+
+    elif subcommand == "optimize":
+        if not cfg.get("auto_optimize", True):
+            typer.echo("MEASURE_OPTIMIZE auto_optimize disabled in config")
+            return
+        if current_angle is None:
+            raise typer.Exit("measure optimize requires --current-angle")
+        min_posts = int(cfg.get("min_posts_per_angle", 1))
+        min_views = int(cfg.get("min_views_per_angle", 10))
+        threshold = float(cfg.get("switch_threshold", 10.0))
+        new_angle = auto_optimize_angle(
+            str(db_path), current_angle=current_angle,
+            min_posts_per_angle=min_posts, min_views_per_angle=min_views,
+            switch_threshold=threshold,
+        )
+        if new_angle != current_angle:
+            typer.echo(f"MEASURE_OPTIMIZE switch {current_angle} -> {new_angle}")
+        else:
+            typer.echo(f"MEASURE_OPTIMIZE keep {current_angle}")
+
+    else:
+        raise typer.Exit(f"unknown subcommand: {subcommand}")
+
+
+@app.command()
 def cycle() -> None:
     """Run one autonomous pipeline pass (ingest -> review -> render -> publish)."""
     import asyncio
@@ -245,6 +325,30 @@ def cycle() -> None:
         render_post(post_id, db_path)
 
     def _publish(post_id, db_path, path, platform):
+        # Kill gate: skip publishing if retention is below threshold with enough views
+        from clipping_tools.review.render import get_avg_retention, should_kill_underperformer
+        import yaml
+        mcfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text()).get(
+            "measurement", {}
+        )
+        retention_threshold = float(mcfg.get("retention_threshold", 30.0))
+        min_views_for_kill = int(mcfg.get("min_views_for_kill", 50))
+        avg_ret = get_avg_retention(str(db_path), post_id=post_id)
+        # Count views across all metrics rows for this post
+        from ..db import init_db as _init_db
+        conn = _init_db(db_path)
+        vrow = conn.execute(
+            "SELECT SUM(views) AS total_views FROM metrics WHERE post_id=?",
+            (post_id,),
+        ).fetchone()
+        total_views = vrow["total_views"] or 0
+        conn.close()
+        if total_views >= min_views_for_kill and should_kill_underperformer(
+            avg_ret, total_views, retention_threshold=retention_threshold,
+            min_views=min_views_for_kill,
+        ):
+            typer.echo(f"  SKIP publish post {post_id} on {platform}: retention {avg_ret}% below kill threshold")
+            return
         if platform == "tiktok":
             from .publish.tiktok import publish_to_tiktok
             publish_to_tiktok(post_id, db_path, path)
@@ -254,9 +358,9 @@ def cycle() -> None:
         else:
             from .publish.youtube import upload_to_youtube
             upload_to_youtube(post_id, db_path, path)
-        from .db import init_db as _init_db
+        from .db import init_db as _init_db2
         from .review.warmup import record_publish
-        record_publish(_init_db(db_path), platform, os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
+        record_publish(_init_db2(db_path), platform, os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
 
     def _gate(conn, platform, account):
         from .review.warmup import can_publish
@@ -270,6 +374,27 @@ def cycle() -> None:
                        publish_account=os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None,
                        targets=targets)
     typer.echo(f"CYCLE_OK rendered={result['rendered']} published={result['published']}")
+
+    # Auto-optimize: switch default angle if another performs significantly better
+    import yaml
+    mcfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text()).get(
+        "measurement", {}
+    )
+    if mcfg.get("auto_optimize", True):
+        from clipping_tools.review.render import auto_optimize_angle
+        current_angle = os.environ.get("CLIPZIDA_DEFAULT_ANGLE", "funny")
+        min_posts = int(mcfg.get("min_posts_per_angle", 1))
+        min_views = int(mcfg.get("min_views_per_angle", 10))
+        threshold = float(mcfg.get("switch_threshold", 10.0))
+        new_angle = auto_optimize_angle(
+            str(ROOT / "data" / "state.db"), current_angle=current_angle,
+            min_posts_per_angle=min_posts, min_views_per_angle=min_views,
+            switch_threshold=threshold,
+        )
+        if new_angle != current_angle:
+            typer.echo(f"MEASURE_OPTIMIZE switch {current_angle} -> {new_angle}")
+        else:
+            typer.echo(f"MEASURE_OPTIMIZE keep {current_angle}")
 
 
 if __name__ == "__main__":

@@ -39,3 +39,11 @@ publish:
   slots: {start: "12:00", end: "23:00", tz: "Africa/Nairobi"}
   jitter_minutes: 7
   launch_wave_mode: asap
+
+measurement:
+  retention_threshold: 30.0    # kill posts below this retention %
+  min_views_for_kill: 50       # need this many views before kill decision
+  auto_optimize: true          # auto-switch default angle when evidence is strong
+  min_posts_per_angle: 1       # need this many posts per angle to compare
+  min_views_per_angle: 10      # need this many views per angle to compare
+  switch_threshold: 10.0       # angle must beat current by > this many points

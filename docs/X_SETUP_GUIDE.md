@@ -81,17 +81,27 @@ https://twitter.com/i/oauth2/authorize
 
 ### Step C: Exchange Authorization Code for Tokens
 
-After the user authorizes, X redirects to your callback URI with a `?code=...` parameter. Exchange it:
+After the user authorizes, X redirects to your callback URI with a `?code=...` parameter. Exchange it using **Basic Auth** (`client_id:client_secret` in the Authorization header — X requires this for confidential clients):
 
 ```http
 POST https://api.x.com/2/oauth2/token
+Authorization: Basic <base64(client_id:client_secret)>
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code
 code=AUTHORIZATION_CODE
-redirect_uri=https://clipzida.com/callback/x
+redirect_uri=http://localhost:8765/callback/x
 client_id=YOUR_CLIENT_ID
 code_verifier=CODE_VERIFIER
+```
+
+Or use the helper script:
+
+```bash
+cd ~/clipping_tools
+export X_CLIENT_ID=your_client_id
+export X_CLIENT_SECRET=your_client_secret
+python3 scripts/x_token_exchange.py <AUTH_CODE> <CODE_VERIFIER>
 ```
 
 Response includes:
