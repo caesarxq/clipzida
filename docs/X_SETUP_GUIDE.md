@@ -48,14 +48,21 @@ To get an initial access token + refresh token, complete the OAuth 2.0 Authoriza
 
 ### Step A: Generate PKCE Code Verifier & Challenge
 
-```python
-import base64, hashlib, os
+Run the helper script with your configured callback:
 
-code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode()
-code_challenge = base64.urlsafe_b64encode(
-    hashlib.sha256(code_verifier.encode()).digest()
-).rstrip(b"=").decode()
+```bash
+cd ~/clipping_tools
+export X_CLIENT_ID=your_client_id_here
+export X_REDIRECT_URI=http://localhost:8765/callback/x
+python scripts/x_oauth_setup.py
 ```
+
+It prints:
+- `CODE_VERIFIER` — **save this** (you need it for the token exchange)
+- `CODE_CHALLENGE`
+- `AUTHORIZE URL` — open this in a browser
+
+**Note:** X allows `http://localhost` callback URIs as an exception to the HTTPS rule. The `redirect_uri` must match `http://localhost:8765/callback/x` exactly — no trailing slash, no `https`, no case changes.
 
 ### Step B: Direct User to Authorization URL
 
@@ -91,6 +98,34 @@ Response includes:
 - `access_token` — bearer token for API calls
 - `refresh_token` — use to get new access tokens when they expire
 - `expires_in` — seconds until access token expires (typically 7200 = 2 hours)
+
+---
+
+## Common Authorization Failures (read this if Step B fails)
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `redirect_uri mismatch` | The `redirect_uri` in the auth URL doesn't exactly match what's registered in the X Developer Portal | Copy the **exact** redirect URI from your app's settings (no trailing slash differences, same `http`/`https`) |
+| `Unauthorized client` | App type isn't "Web App" or OAuth 2.0 isn't enabled | In the Developer Portal, set App type = Web App and check "Enable OAuth 2.0" |
+| `invalid_request` | Missing or wrong `code_challenge_method` | Must be `S256` (X doesn't support `plain`) |
+| `invalid_scope` | Scope includes permissions the app doesn't have | Use only `tweet.read tweet.write users.read media.write` |
+| `User must verify account` | Your X account isn't phone-verified | Add a phone number to the X account you're authorizing with |
+| `callback URL not whitelisted` | The redirect URI isn't in the app's Callback URIs list | Add it in the Developer Portal under your app's "Callback URIs" / "Redirect URIs" setting |
+| `403 Forbidden on authorize` | Website URL not set in app settings | Add a Website URL (can be `https://clipzida.com`) in the app settings |
+
+### Critical: Redirect URI must match exactly
+
+X does **not** do prefix matching or wildcard matching. These are **different** URIs to X:
+
+```
+https://clipzida.com/callback/x      ✓ registered
+https://clipzida.com/callback/x/     ✗ trailing slash
+http://clipzida.com/callback/x       ✗ http vs https
+https://CLIPZIDA.com/callback/x      ✗ case-sensitive
+```
+
+Copy the exact string from your app's Developer Portal settings into both the auth URL and the token exchange request.
+
 
 ---
 

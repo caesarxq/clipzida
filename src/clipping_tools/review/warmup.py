@@ -33,7 +33,7 @@ def daily_cap(platform_cfg: dict, age_days: int) -> int:
 def posts_today(conn: sqlite3.Connection, platform: str, account: str | None = None) -> int:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT COUNT(*) FROM posts WHERE platform=? AND status='published' "
+        "SELECT COUNT(*) FROM post_platforms WHERE platform=? AND status='published' "
         "AND substr(published_at,1,10)=?", (platform, day)
     ).fetchone()
     return int(row[0])

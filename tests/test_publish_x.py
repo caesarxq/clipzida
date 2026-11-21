@@ -190,10 +190,11 @@ def test_publish_to_x_writes_back_external_id_and_url(monkeypatch, tmp_path):
     assert result["platform"] == "x"
 
     conn = init_db(db)
-    row = conn.execute("SELECT external_post_id, url, status, platform FROM posts WHERE id=16").fetchone()
+    row = conn.execute("SELECT external_post_id, url FROM posts WHERE id=16").fetchone()
     assert row["external_post_id"] == "1876543210987654321"
-    assert row["status"] == "published"
-    assert row["platform"] == "x"
+    plat = conn.execute("SELECT status, platform FROM post_platforms WHERE post_id=16 AND platform='x'").fetchone()
+    assert plat["status"] == "published"
+    assert plat["platform"] == "x"
 
 
 def test_publish_to_x_raises_when_no_client_id(monkeypatch, tmp_path):

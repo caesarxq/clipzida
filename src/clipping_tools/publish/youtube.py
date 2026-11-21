@@ -77,7 +77,11 @@ def upload_to_youtube(post_id: int, db_path, video_path: str, *, transport=None,
     ext = str(data.get("id") or "")
     url = f"https://www.youtube.com/watch?v={ext}"
     with conn:
-        conn.execute("UPDATE posts SET external_post_id=?, url=?, status='published', "
-                     "platform=?, published_at=? WHERE id=?",
-                     (ext, url, "youtube", utcnow(), post_id))
+        conn.execute("UPDATE posts SET external_post_id=?, url=?, published_at=? WHERE id=?",
+                     (ext, url, utcnow(), post_id))
+        conn.execute("INSERT INTO post_platforms(post_id, platform, status, external_id, url, published_at) "
+                     "VALUES(?, 'youtube', 'published', ?, ?, ?) "
+                     "ON CONFLICT(post_id, platform) DO UPDATE SET status='published', "
+                     "external_id=excluded.external_id, url=excluded.url, published_at=excluded.published_at",
+                     (post_id, ext, url, utcnow()))
     return {"external_id": ext, "url": url, "privacy": "unlisted"}

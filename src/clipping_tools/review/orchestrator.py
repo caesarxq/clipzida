@@ -61,7 +61,10 @@ def run_cycle(db_path, *, ingest_fn=None, review_publish_fn=None,
                     if not allowed:
                         print(f"publish gate blocked post {post['id']} on {platform}: {reason}")
                         continue
-                publish_fn(post["id"], db_path, path, platform)
-                counts["published"] += 1
+                try:
+                    publish_fn(post["id"], db_path, path, platform)
+                    counts["published"] += 1
+                except Exception as e:
+                    print(f"publish failed post {post['id']} on {platform}: {e}")
         conn.close()
     return counts

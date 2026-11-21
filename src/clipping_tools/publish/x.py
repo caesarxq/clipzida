@@ -228,7 +228,11 @@ def publish_to_x(post_id: int, db_path, video_path: str, *,
     ext = str(created["id"])
     url = f"https://x.com/i/status/{ext}"
     with conn:
-        conn.execute("UPDATE posts SET external_post_id=?, url=?, status='published', "
-                     "platform=?, published_at=? WHERE id=?",
-                     (ext, url, "x", utcnow(), post_id))
+        conn.execute("UPDATE posts SET external_post_id=?, url=?, published_at=? WHERE id=?",
+                     (ext, url, utcnow(), post_id))
+        conn.execute("INSERT INTO post_platforms(post_id, platform, status, external_id, url, published_at) "
+                     "VALUES(?, 'x', 'published', ?, ?, ?) "
+                     "ON CONFLICT(post_id, platform) DO UPDATE SET status='published', "
+                     "external_id=excluded.external_id, url=excluded.url, published_at=excluded.published_at",
+                     (post_id, ext, url, utcnow()))
     return {"external_id": ext, "url": url, "platform": "x"}

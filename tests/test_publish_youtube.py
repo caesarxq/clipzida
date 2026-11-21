@@ -43,6 +43,8 @@ def test_upload_writes_back_external_id_and_url(monkeypatch):
     assert result["external_id"] == "ytvid123"
     assert result["url"].endswith("ytvid123")
     conn = init_db(db)
-    row = conn.execute("SELECT external_post_id, url, status FROM posts WHERE id=16").fetchone()
+    row = conn.execute("SELECT external_post_id, url FROM posts WHERE id=16").fetchone()
     assert row["external_post_id"] == "ytvid123"
-    assert row["status"] == "published"
+    plat = conn.execute("SELECT status, platform FROM post_platforms WHERE post_id=16 AND platform='youtube'").fetchone()
+    assert plat["status"] == "published"
+    assert plat["platform"] == "youtube"

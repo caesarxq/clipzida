@@ -43,7 +43,7 @@ def test_account_age_days_computes_from_created_at():
 def test_can_publish_blocks_when_daily_cap_reached():
     db = _seed(created_days_ago=0)
     conn = init_db(db)
-    conn.execute("INSERT INTO posts(id,platform,status,published_at) VALUES(9,'tiktok','published',?)",
+    conn.execute("INSERT INTO post_platforms(post_id,platform,status,published_at) VALUES(9,'tiktok','published',?)",
                  (datetime.now(timezone.utc).isoformat(),))
     conn.commit()
     ok, reason = can_publish(conn, "tiktok", "@clipzida")
