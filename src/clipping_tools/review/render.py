@@ -428,7 +428,9 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
                 sfx_idx += 1
 
     # Build full filter_complex string (video + audio)
-    full_filter = ";".join(p for p in [vf, af] if p)
+    full_filter = vf.rstrip(";")
+    if af:
+        full_filter += ";" + af
 
     cmd = [
         ffmpeg_bin(), "-y",
