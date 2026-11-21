@@ -366,7 +366,7 @@ def build_enhanced_filter(ass_path: Path, hook: str,
             dur = float(ev.get("duration", 1.0))
             out_label = f"[meme_out{i}]" if i < len(meme_events) - 1 else "[out]"
             meme_parts.append(
-                f"{prev_label}[{sfx_idx + i}:v]scale=300:300:"
+                f"[{sfx_idx + i}:v]scale=300:300:"
                 f"force_original_aspect_ratio=decrease,"
                 f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2[meme_scaled{i}];"
                 f"[meme_scaled{i}][{prev_label.strip('[]')}]overlay="
