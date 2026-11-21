@@ -11,6 +11,7 @@ from pathlib import Path
 import typer
 
 from . import db
+import clipping_tools.monitor as monitor_mod
 
 app = typer.Typer(help="clipping_tools — autonomous GTA 6 clipping pipeline")
 ROOT = Path(__file__).resolve().parents[2]
@@ -185,6 +186,12 @@ def review_publish() -> None:
             await publish_pending_reviews(client, ROOT / "data/state.db", channel_id, role)
     asyncio.run(_send())
     typer.echo("REVIEW_PUBLISH_DONE")
+
+
+@app.command()
+def monitor(db_path: str | Path | None = None) -> None:
+    """Run pipeline health checks and post alerts to Discord."""
+    monitor_mod.monitor(db_path=db_path)
 
 
 @app.command()
