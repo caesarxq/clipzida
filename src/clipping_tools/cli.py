@@ -56,6 +56,9 @@ def doctor() -> None:
         ok = ok and p.exists()
     tw = bool(os.environ.get("TWITCH_CLIENT_ID") and os.environ.get("TWITCH_CLIENT_SECRET"))
     checks.append(("twitch credentials (env)", tw, "set" if tw else "not set — needed for live ingest"))
+    xk = bool(os.environ.get("X_API_KEY") and os.environ.get("X_API_SECRET"))
+    xa = bool(os.environ.get("X_ACCESS_TOKEN") and os.environ.get("X_ACCESS_TOKEN_SECRET"))
+    checks.append(("X credentials (env)", xk and xa, "set" if xk and xa else "not set — needed for X publishing"))
     for name, passed, detail in checks:
         mark = "OK " if passed else "!! "
         typer.echo(f"[{mark}] {name:28s} {detail}")
@@ -244,6 +247,9 @@ def cycle() -> None:
         if platform == "tiktok":
             from .publish.tiktok import publish_to_tiktok
             publish_to_tiktok(post_id, db_path, path)
+        elif platform == "x":
+            from .publish.x import publish_to_x
+            publish_to_x(post_id, db_path, path)
         else:
             from .publish.youtube import upload_to_youtube
             upload_to_youtube(post_id, db_path, path)
