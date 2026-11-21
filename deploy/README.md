@@ -31,6 +31,7 @@ ssh -i ~/.ssh/clipzida_vps_ed25519 clipzida@<VPS_IP> \
 - `clipzida-render.service` — queue worker (single concurrency)
 - `clipzida-publish.service` — rate-limited post queue
 - `clipzida-bot.service` — Discord review bot
+- `clipzida-metrics.timer` — every 15 min: `clipping-tools metrics-collect` (platform engagement metrics)
 - `clipzida-monitor.timer` — every 15 min: `clipping-tools monitor` (posts alerts to #alerts)
 - Keepalive cron (Oracle-free box only): light CPU tick to avoid idle reclamation.
 
