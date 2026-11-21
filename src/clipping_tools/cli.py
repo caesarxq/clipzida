@@ -280,6 +280,28 @@ def measure(
 
 
 @app.command()
+def metrics_collect(platform: Optional[str] = None) -> None:
+    """Fetch engagement metrics from platform APIs and write to the DB.
+
+    Collects views, likes, comments, shares for all published posts that have
+    an external_post_id, via each platform's public API.
+    """
+    from clipping_tools.metrics.collect import collect_all
+    results = collect_all(platform=platform,
+                          db_path=str(ROOT / "data" / "state.db"))
+    n_ok = sum(1 for r in results if r is not None)
+    n_fail = sum(1 for r in results if r is None)
+    for r in results:
+        if r:
+            typer.echo(
+                f"  METRICS post={r['post_id']} platform={r['platform']} "
+                f"views={r['metrics']['views']} likes={r['metrics']['likes']} "
+                f"comments={r['metrics']['comments']} shares={r['metrics']['shares']}"
+            )
+    typer.echo(f"METRICS_COLLECT ok={n_ok} failed={n_fail}")
+
+
+@app.command()
 def cycle() -> None:
     """Run one autonomous pipeline pass (ingest -> review -> render -> publish)."""
     import asyncio
