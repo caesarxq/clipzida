@@ -1089,3 +1089,177 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
 def init_db_for_path(path: str | Path):
     from ..db import init_db
     return init_db(path)
+
+
+# ── Phase 6: Measurement & Optimization ────────────────────────────────────
+
+def record_metrics(db_path: str | Path, post_id: int, views: int,
+                   likes: int, comments: int, shares: int,
+                   fetched_at: str, approved_views: int | None = None,
+                   payout: float | None = None) -> None:
+    """Record or upsert engagement metrics for a post.
+
+    Uses (post_id, fetched_at) as the primary key, so re-recording the same
+    post at the same timestamp updates instead of duplicating.
+    """
+    if approved_views is None:
+        approved_views = int(views * 0.6)  # estimate: 60% watched through
+    conn = init_db_for_path(db_path)
+    try:
+        conn.execute(
+            """INSERT INTO metrics(post_id, fetched_at, views, likes, comments,
+               shares, approved_views, payout)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(post_id, fetched_at) DO UPDATE SET
+               views=excluded.views, likes=excluded.likes,
+               comments=excluded.comments, shares=excluded.shares,
+               approved_views=excluded.approved_views,
+               payout=excluded.payout""",
+            (post_id, fetched_at, views, likes, comments, shares,
+             approved_views, payout),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_avg_retention(db_path: str | Path, post_id: int | None = None) -> float:
+    """Compute average view % = sum(approved_views) / sum(views) * 100.
+
+    If post_id is given, returns retention for that post only.
+    Otherwise returns retention across all posts with metrics.
+    Returns 0.0 when there are no metrics or zero views.
+    """
+    conn = init_db_for_path(db_path)
+    try:
+        if post_id is not None:
+            row = conn.execute(
+                "SELECT SUM(views) AS total_views, SUM(approved_views) AS total_approved "
+                "FROM metrics WHERE post_id=?",
+                (post_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT SUM(views) AS total_views, SUM(approved_views) AS total_approved "
+                "FROM metrics",
+            ).fetchone()
+    finally:
+        conn.close()
+
+    total_views = row["total_views"] or 0
+    total_approved = row["total_approved"] or 0
+    if total_views == 0:
+        return 0.0
+    return round(total_approved / total_views * 100.0, 2)
+
+
+def should_kill_underperformer(retention_pct: float, views: int,
+                               retention_threshold: float = 30.0,
+                               min_views: int = 50) -> bool:
+    """Return True if a post should be killed.
+
+    Kill when retention is below threshold AND views meet the minimum.
+    Below min_views, we don't kill — not enough data yet.
+    """
+    if views < min_views:
+        return False
+    return retention_pct < retention_threshold
+
+
+def ab_test_variant(db_path: str | Path, post_id: int, variant: str,
+                    test_name: str = "default",
+                    assigned_at: str | None = None) -> None:
+    """Record which A/B test variant a post was assigned to.
+
+    (post_id, test_name) is unique — re-assigning updates the variant.
+    """
+    from datetime import datetime, timezone
+    if assigned_at is None:
+        assigned_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    conn = init_db_for_path(db_path)
+    try:
+        conn.execute(
+            """INSERT INTO ab_tests(post_id, test_name, variant, assigned_at)
+               VALUES(?, ?, ?, ?)
+               ON CONFLICT(post_id, test_name) DO UPDATE SET
+               variant=excluded.variant, assigned_at=excluded.assigned_at""",
+            (post_id, test_name, variant, assigned_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def select_best_variant(db_path: str | Path, test_name: str = "default") -> str | None:
+    """Select the A/B test variant with the highest average retention.
+
+    Joins ab_tests with metrics to compute avg retention per variant.
+    Returns the variant name, or None if there's no data.
+    """
+    conn = init_db_for_path(db_path)
+    try:
+        rows = conn.execute(
+            """SELECT at.variant,
+                      SUM(m.views) AS total_views,
+                      SUM(m.approved_views) AS total_approved
+               FROM ab_tests at
+               JOIN metrics m ON m.post_id = at.post_id
+               WHERE at.test_name = ?
+               GROUP BY at.variant
+               ORDER BY (SUM(m.approved_views) * 1.0 / NULLIF(SUM(m.views), 0)) DESC""",
+            (test_name,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return None
+    return rows[0]["variant"]
+
+
+def auto_optimize_angle(db_path: str | Path, current_angle: str,
+                        min_posts_per_angle: int = 1,
+                        min_views_per_angle: int = 10,
+                        switch_threshold: float = 10.0) -> str:
+    """Auto-switch to a better-performing angle.
+
+    Compares average retention of each angle that has enough posts and views.
+    Switches only if another angle beats current_angle by more than
+    switch_threshold percentage points.
+
+    Returns the (possibly new) angle to use.
+    """
+    conn = init_db_for_path(db_path)
+    try:
+        rows = conn.execute(
+            """SELECT p.angle AS angle,
+                      COUNT(*) AS post_count,
+                      SUM(m.views) AS total_views,
+                      SUM(m.approved_views) AS total_approved
+               FROM posts p
+               JOIN metrics m ON m.post_id = p.id
+               WHERE p.angle IS NOT NULL AND p.angle != ''
+               GROUP BY p.angle
+               HAVING post_count >= ? AND total_views >= ?""",
+            (min_posts_per_angle, min_views_per_angle),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return current_angle
+
+    retentions = {}
+    for row in rows:
+        tv = row["total_views"] or 0
+        ta = row["total_approved"] or 0
+        retentions[row["angle"]] = (ta / tv * 100.0) if tv > 0 else 0.0
+
+    current_retention = retentions.get(current_angle, 0.0)
+
+    best_angle = max(retentions, key=lambda a: retentions.get(a, 0.0))
+    best_retention = retentions[best_angle]
+
+    if best_angle != current_angle and (best_retention - current_retention) > switch_threshold:
+        return best_angle
+    return current_angle

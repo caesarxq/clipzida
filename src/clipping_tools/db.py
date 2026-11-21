@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, post_id INTEGER, de
 CREATE TABLE IF NOT EXISTS metrics(post_id INTEGER, fetched_at TEXT, views INTEGER, likes INTEGER,
   comments INTEGER, shares INTEGER, approved_views INTEGER, payout REAL,
   PRIMARY KEY(post_id, fetched_at));
+CREATE TABLE IF NOT EXISTS ab_tests(id INTEGER PRIMARY KEY, post_id INTEGER,
+  test_name TEXT, variant TEXT, assigned_at TEXT,
+  UNIQUE(post_id, test_name));
 CREATE TABLE IF NOT EXISTS tokens(service TEXT PRIMARY KEY, access_token TEXT, refresh_token TEXT,
   expires_at TEXT, scopes TEXT);
 CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY, platform TEXT, handle TEXT, brand_role TEXT,
