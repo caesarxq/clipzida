@@ -431,10 +431,6 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
     full_filter = vf.rstrip(";")
     if af:
         full_filter += ";" + af
-    # Debug: print full_filter for troubleshooting
-    import sys as _sys
-    print(f"DEBUG_FILTER: vf_ends_semicolon={vf.endswith(';')}, af={'empty' if not af else 'present'}, full_filter_has_double_semicolon={';;' in full_filter}", file=_sys.stderr)
-    print(f"DEBUG_FILTER_TAIL: {full_filter[-120:]}", file=_sys.stderr)
 
     cmd = [
         ffmpeg_bin(), "-y",
