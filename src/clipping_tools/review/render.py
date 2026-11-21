@@ -349,7 +349,7 @@ def build_enhanced_filter(ass_path: Path, hook: str,
                 sfx_idx += 1
 
     if af_parts:
-        af_parts.append(f"{amix_inputs}amix=inputs={amix_count}:normalize=0[out_a]")
+        af_parts.append(f"{amix_inputs}amix=inputs={amix_count}:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[out_a]")
         af = "".join(af_parts)
     else:
         af = ""
@@ -448,7 +448,6 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
     # Map audio (amix output always exists since build_enhanced_filter includes amix)
     cmd.extend(["-map", "[out_a]"])
     cmd.extend([
-        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
         "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
         "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", "30", "-g", "60",
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
