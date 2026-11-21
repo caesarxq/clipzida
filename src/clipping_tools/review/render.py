@@ -159,6 +159,140 @@ def _word_score(word: dict, peaks: list[dict]) -> float:
     return score
 
 
+def detect_segments(words: list[dict], peaks: list[dict],
+                    clip_duration: float, min_seg: float = 0.5,
+                    max_seg: float = 3.0) -> list[dict]:
+    """Detect jump-cut segments from transcript gaps + energy peaks.
+
+    Cuts out silence gaps (> 0.4 seconds between words) and caps segment
+    length at max_seg. Segments containing high energy peaks are marked
+    'zoom'. Returns list of {start, end, type}.
+    """
+    if not words:
+        return [{"start": 0.0, "end": float(clip_duration), "type": "normal"}]
+
+    sorted_words = sorted(words, key=lambda w: float(w.get("start", 0)))
+
+    # Build cut points: start, then gap boundaries, then end of last word
+    cut_points = [float(sorted_words[0]["start"])]
+    for i in range(len(sorted_words) - 1):
+        gap = float(sorted_words[i + 1]["start"]) - float(sorted_words[i]["end"])
+        if gap > 0.4:  # silence gap = jump-cut point
+            cut_points.append(float(sorted_words[i]["end"]))
+            cut_points.append(float(sorted_words[i + 1]["start"]))
+    cut_points.append(float(sorted_words[-1]["end"]))
+
+    # Build segments from cut points, capping each at max_seg.
+    # Skip segments that contain no words (pure silence between cuts).
+    segments = []
+    for i in range(len(cut_points) - 1):
+        seg_start = cut_points[i]
+        seg_end = cut_points[i + 1]
+        if seg_end - seg_start < 0.1:
+            continue
+        # Check if any word falls within this segment
+        has_word = any(
+            seg_start <= float(w.get("start", 0)) < seg_end
+            for w in sorted_words
+        )
+        if not has_word:
+            continue
+        while seg_start < seg_end:
+            piece_end = min(seg_start + max_seg, seg_end)
+            # Check if any word falls within this piece
+            piece_has_word = any(
+                seg_start <= float(w.get("start", 0)) < piece_end
+                for w in sorted_words
+            )
+            if not piece_has_word:
+                seg_start = piece_end
+                continue
+            seg_type = "normal"
+            for p in peaks:
+                if seg_start <= float(p["t"]) <= piece_end and float(p["rms"]) > 0.5:
+                    seg_type = "zoom"
+                    break
+            segments.append({
+                "start": round(seg_start, 2),
+                "end": round(piece_end, 2),
+                "type": seg_type,
+            })
+            seg_start = piece_end
+
+    return segments
+
+
+def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
+    """Build ffmpeg filter fragments for one segment from [0:v].
+
+    Returns a list of filter-chain strings, each ending with [fv{N}] label.
+    Caller joins them with ';'.
+    """
+    start = seg["start"]
+    end = seg["end"]
+    seg_type = seg.get("type", "normal")
+
+    fragments = [f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[fv{seg_idx}]"]
+
+    if seg_type == "zoom":
+        # Zoom in during the segment: 1.0x -> 1.3x
+        fragments.append(
+            f"[fv{seg_idx}]zoompan=z='min(zoom+0.01,1.3)':d=25[fv{seg_idx}]"
+        )
+    elif seg_type == "flash":
+        # White flash overlay at segment start
+        fragments.append(
+            f"color=c=white:s=1080x1920:d=0.05[f{seg_idx}_flash];"
+            f"[fv{seg_idx}][f{seg_idx}_flash]overlay=enable='eq(t,{start})'[fv{seg_idx}]"
+        )
+
+    return fragments
+
+
+def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
+                       font: str, hook_esc: str) -> tuple[str, str]:
+    """Build complete filtergraph from segments: trim + effects + concat + captions.
+
+    Returns (video_filter, audio_filter).
+    """
+    af = ""
+
+    if len(segs) == 1:
+        seg = segs[0]
+        seg_fragments = build_segment_filter(seg, 0)
+        vf = (
+            ";".join(seg_fragments) + ";"
+            f"[fv0]scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920,boxblur=20:5,eq=brightness=-0.06[bg];"
+            f"[0:v]trim=start={seg['start']}:end={seg['end']},"
+            f"setpts=PTS-STARTPTS,scale=1080:-2[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
+            f"[base]subtitles={ass_path}[cap];"
+            f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
+            f"fontcolor=white:borderw=5:bordercolor=black:"
+            f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[out]"
+        )
+    else:
+        all_fragments = []
+        for i, seg in enumerate(segs):
+            all_fragments.extend(build_segment_filter(seg, i))
+        concat_inputs = "".join([f"[fv{i}]" for i in range(len(segs))])
+        vf = ";".join(all_fragments)
+        vf += f";{concat_inputs}concat=n={len(segs)}:v=1:a=0[v_concat];"
+        vf += (
+            f"[v_concat]scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920,boxblur=20:5,eq=brightness=-0.06[bg];"
+            f"[v_concat]scale=1080:-2[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
+            f"[base]subtitles={ass_path}[cap];"
+            f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
+            f"fontcolor=white:borderw=5:bordercolor=black:"
+            f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[out]"
+        )
+
+    return vf, af
+
+
 def select_hook_moment(words: list[dict], peaks: list[dict],
                        target_min: float = 18, target_max: float = 45) -> dict:
     """Select a moment window that STARTS near a high-scoring hook word.
@@ -412,7 +546,8 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
            sfx_events: list[dict] | None = None,
            meme_events: list[dict] | None = None,
            start: float | None = None,
-           end: float | None = None) -> dict:
+           end: float | None = None,
+           segs: list[dict] | None = None) -> dict:
     """Full enhanced render for an approved post.
 
     Adds:
@@ -420,53 +555,78 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
     - SFX overlays at event timestamps
     - Meme/reaction PNG overlays at event timestamps
     - Dynamic emphasis via ASS captions
+    - Jump-cut pacing via segments (when segs provided)
     """
-    vf, af = build_enhanced_filter(ass_path, hook, music_path, sfx_events, meme_events, start=start, end=end)
+    font = font_path()
+    hook_esc = hook.replace("'", "\\u2019").replace(":", "\\:")
 
-    # Build input list
-    inputs = ["-i", str(src)]
+    # Use segment-based pacing when segs provided
+    if segs:
+        vf, af = build_paced_filter(segs, str(ass_path), hook, font, hook_esc)
+        # Paced path: source video only (no music/SFX/memes yet)
+        inputs = ["-i", str(src)]
+        full_filter = vf.rstrip(";")
+        # Map video from concat output, copy audio from source
+        cmd = [
+            ffmpeg_bin(), "-y",
+        ]
+        cmd.extend(inputs)
+        cmd.extend(["-filter_complex", full_filter])
+        cmd.extend(["-map", "[out]", "-map", "0:a?"])
+        cmd.extend([
+            "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
+            "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", "30", "-g", "60",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+            "-movflags", "+faststart", str(out),
+        ])
+    else:
+        vf, af = build_enhanced_filter(ass_path, hook, music_path, sfx_events,
+                                       meme_events, start=start, end=end)
 
-    if music_path and Path(music_path).exists():
-        inputs.extend(["-i", str(music_path)])
+        # Build input list
+        inputs = ["-i", str(src)]
 
-    sfx_idx = 2
-    if sfx_events:
-        for i, ev in enumerate(sfx_events):
-            sfx_file = ev.get("file", "")
-            if sfx_file and Path(sfx_file).exists():
-                inputs.extend(["-i", sfx_file])
-                sfx_idx += 1
+        if music_path and Path(music_path).exists():
+            inputs.extend(["-i", str(music_path)])
 
-    meme_idx = sfx_idx
-    if meme_events:
-        for i, ev in enumerate(meme_events):
-            meme_file = ev.get("file", "")
-            if meme_file and Path(meme_file).exists():
-                inputs.extend(["-i", meme_file])
-                sfx_idx += 1
+        sfx_idx = 2
+        if sfx_events:
+            for i, ev in enumerate(sfx_events):
+                sfx_file = ev.get("file", "")
+                if sfx_file and Path(sfx_file).exists():
+                    inputs.extend(["-i", sfx_file])
+                    sfx_idx += 1
 
-    # Build full filter_complex string (video + audio)
-    full_filter = vf.rstrip(";")
-    if af:
-        full_filter += ";" + af
+        meme_idx = sfx_idx
+        if meme_events:
+            for i, ev in enumerate(meme_events):
+                meme_file = ev.get("file", "")
+                if meme_file and Path(meme_file).exists():
+                    inputs.extend(["-i", meme_file])
+                    sfx_idx += 1
 
-    cmd = [
-        ffmpeg_bin(), "-y",
-    ]
-    # Add inputs
-    cmd.extend(inputs)
-    # Filter complex
-    cmd.extend(["-filter_complex", full_filter])
-    # Map video
-    cmd.extend(["-map", "[out]"])
-    # Map audio (amix output always exists since build_enhanced_filter includes amix)
-    cmd.extend(["-map", "[out_a]"])
-    cmd.extend([
-        "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
-        "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", "30", "-g", "60",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
-        "-movflags", "+faststart", str(out),
-    ])
+        # Build full filter_complex string (video + audio)
+        full_filter = vf.rstrip(";")
+        if af:
+            full_filter += ";" + af
+
+        cmd = [
+            ffmpeg_bin(), "-y",
+        ]
+        # Add inputs
+        cmd.extend(inputs)
+        # Filter complex
+        cmd.extend(["-filter_complex", full_filter])
+        # Map video
+        cmd.extend(["-map", "[out]"])
+        # Map audio (amix output always exists since build_enhanced_filter includes amix)
+        cmd.extend(["-map", "[out_a]"])
+        cmd.extend([
+            "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
+            "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", "30", "-g", "60",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+            "-movflags", "+faststart", str(out),
+        ])
 
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=900)
@@ -511,7 +671,10 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
     moment = select_hook_moment(words, peaks)
     hook = (moment.get("hook_word") or clip["title"] or "GTA 6 MOMENT")[:24].upper()
     make_enhanced_ass(words, ass, hook, moment=moment)
-    # Collect asset paths
+    # Detect jump-cut segments for pacing
+    clip_duration = words[-1]["end"] if words else 30.0
+    segs = detect_segments(words, peaks, clip_duration)
+    # Collect asset paths (only used in non-paced path)
     assets = ASSETS_DIR
     music = assets / "audio" / "music_bed.mp3"
     sfx_events = []
@@ -533,7 +696,8 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
                   music_path=str(music) if music.exists() else None,
                   sfx_events=[e for e in sfx_events if Path(e.get("file", "")).exists()],
                   meme_events=[e for e in meme_events if Path(e.get("file", "")).exists()],
-                  start=moment["start"], end=moment["end"])
+                  start=moment["start"], end=moment["end"],
+                  segs=segs if len(segs) > 1 else None)
     proxy_path = make_proxy(out)
     with conn:
         render_id = _replace_render(conn, clip["id"], "vertical-1080x1920", str(out))
