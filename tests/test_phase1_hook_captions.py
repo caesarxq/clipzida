@@ -73,7 +73,7 @@ def test_render_post_trims_to_hook_moment(monkeypatch, tmp_path):
 
     captured = {}
 
-    def fake_render(src, out, ass, hook, music_path=None, sfx_events=None, meme_events=None, start=None, end=None, segs=None, flashes=None):
+    def fake_render(src, out, ass, hook, music_path=None, sfx_events=None, meme_events=None, start=None, end=None, segs=None, flashes=None, angle=None):
         captured["src"] = str(src)
         captured["hook"] = hook
         captured["start"] = start

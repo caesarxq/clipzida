@@ -63,7 +63,7 @@ NORMAL_COLOR = "&H00FFFFFF&"    # white
 
 def source_clip_for_post(conn: sqlite3.Connection, post_id: int) -> dict | None:
     row = conn.execute(
-        "SELECT c.id, c.url, c.title, c.duration, c.broadcaster FROM posts p "
+        "SELECT c.id, c.url, c.title, c.duration, c.broadcaster, p.angle FROM posts p "
         "JOIN clips_raw c ON c.id = CAST(SUBSTR(p.idempotency_key, 6) AS INTEGER) "
         "WHERE p.id=? AND p.status IN ('approved','rendered') AND p.idempotency_key LIKE 'clip-%'",
         (post_id,),
@@ -260,6 +260,68 @@ def speed_ramp_factor(peak: dict) -> float:
         return 1.0
     else:
         return 1.5
+
+
+def audio_duck_filter(voice_input: str | None,
+                      music_input: str,
+                      output: str,
+                      threshold: float = -30,
+                      ratio: float = 4,
+                      attack: float = 0.01,
+                      release: float = 0.2) -> str:
+    """Sidechain compressor that ducks music when voice is present.
+
+    Uses ffmpeg's sidechaincompressor: music is the main input, voice is
+    the sidechain. When voice exceeds threshold, music volume is reduced.
+    """
+    if voice_input is None:
+        return music_input
+    return (
+        f"{music_input}{voice_input}sidechaincompressor="
+        f"threshold={threshold}:ratio={ratio}:attack={attack}:"
+        f"release={release}[{output.strip('[]')}]"
+    )
+
+
+def voice_eq_filter(input_label: str, output_label: str) -> str:
+    """EQ chain for voice clarity: high-pass rumble, presence boost.
+
+    - High-pass at 80Hz to cut low-frequency rumble
+    - Presence boost at 2kHz, 3kHz, 5kHz for speech intelligibility
+    """
+    return (
+        f"{input_label}highpass=f=80,"
+        f"equalizer=f=2000:t=h:w=200:g=3,"
+        f"equalizer=f=3000:t=h:w=300:g=2,"
+        f"equalizer=f=5000:t=h:w=400:g=1{output_label}"
+    )
+
+
+def music_bed_for_angle(angle: str | None,
+                        assets_dir: str | None = None) -> str | None:
+    """Return the music bed path for a given angle.
+
+    - funny → lo-fi/upbeat
+    - hype → phonky/high-energy
+    - news → ambient/cinematic
+    - None → no music
+    - unknown → default music_bed.mp3
+    """
+    if angle is None:
+        return None
+
+    if assets_dir is None:
+        assets_dir = str(ASSETS_DIR)
+
+    mapping = {
+        "funny": "audio/music_funny.mp3",
+        "hype": "audio/music_hype.mp3",
+        "news": "audio/music_news.mp3",
+    }
+
+    rel = mapping.get(angle, "audio/music_bed.mp3")
+    path = str(Path(assets_dir) / rel)
+    return path if Path(path).exists() else str(Path(assets_dir) / "audio/music_bed.mp3")
 
 
 def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
@@ -543,7 +605,8 @@ def build_enhanced_filter(ass_path: Path, hook: str,
                           sfx_events: list[dict] | None = None,
                           meme_events: list[dict] | None = None,
                           start: float | None = None,
-                          end: float | None = None
+                          end: float | None = None,
+                          angle: str | None = None
                           ) -> tuple[str, str]:
     """Build video + audio filtergraphs.
 
@@ -569,17 +632,39 @@ def build_enhanced_filter(ass_path: Path, hook: str,
         "enable='lt(t,2)'[out]"
     )
 
-    # Audio chain: voice + music bed + SFX
+    # Audio chain: voice EQ + music bed (with ducking when angle provided) + SFX
     af_parts = []
-    amix_inputs = "[0:a]"
-    amix_count = 1
 
-    if music_path:
-        af_parts.append(f"[1:a]volume=0.15[music_bed];")
-        amix_inputs += "[music_bed]"
-        amix_count += 1
+    # Always apply EQ to voice
+    af_parts.append(voice_eq_filter("[0:a]", "[voice_eq]"))
 
-    sfx_idx = 2
+    # Resolve music path from angle if not explicitly provided
+    resolved_music = music_path
+    if resolved_music is None and angle is not None:
+        resolved_music = music_bed_for_angle(angle)
+
+    if resolved_music:
+        if angle:
+            # Duck music when voice is present (sidechain compression)
+            # Music is input 1 ([1:a]), voice EQ output is [voice_eq]
+            af_parts.append(
+                f"[1:a][voice_eq]sidechaincompressor="
+                f"threshold=-30:ratio=4:attack=0.01:release=0.2[music_ducked];"
+            )
+            amix_inputs = "[voice_eq][music_ducked]"
+            amix_count = 2
+        else:
+            # Simple volume duck (no sidechain)
+            af_parts.append(f"[1:a]volume=0.15[music_bed];")
+            amix_inputs = "[voice_eq][music_bed]"
+            amix_count = 2
+
+        sfx_idx = 2
+    else:
+        amix_inputs = "[voice_eq]"
+        amix_count = 1
+        sfx_idx = 1
+
     if sfx_events:
         for i, ev in enumerate(sfx_events):
             sfx_file = ev.get("file", "")
@@ -592,11 +677,11 @@ def build_enhanced_filter(ass_path: Path, hook: str,
                 amix_count += 1
                 sfx_idx += 1
 
-    if af_parts:
-        af_parts.append(f"{amix_inputs}amix=inputs={amix_count}:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[out_a]")
-        af = "".join(af_parts)
-    else:
-        af = ""
+    af_parts.append(
+        f"{amix_inputs}amix=inputs={amix_count}:normalize=0,"
+        f"loudnorm=I=-14:TP=-1.5:LRA=11[out_a]"
+    )
+    af = "".join(af_parts)
 
     # Meme/reaction image overlays: chain after [out]
     if meme_events:
@@ -642,7 +727,8 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
            start: float | None = None,
            end: float | None = None,
            segs: list[dict] | None = None,
-           flashes: list[dict] | None = None) -> dict:
+           flashes: list[dict] | None = None,
+           angle: str | None = None) -> dict:
     """Full enhanced render for an approved post.
 
     Adds:
@@ -652,9 +738,15 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
     - Dynamic emphasis via ASS captions
     - Jump-cut pacing via segments (when segs provided)
     - Impact flashes at high energy peaks (when flashes provided)
+    - Angle-specific music bed with voice ducking (when angle provided)
     """
     font = font_path()
     hook_esc = hook.replace("'", "\\u2019").replace(":", "\\:")
+
+    # Resolve music path from angle if not explicitly provided
+    resolved_music = music_path
+    if resolved_music is None and angle is not None:
+        resolved_music = music_bed_for_angle(angle)
 
     # Use segment-based pacing when segs provided
     if segs:
@@ -677,14 +769,15 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
             "-movflags", "+faststart", str(out),
         ])
     else:
-        vf, af = build_enhanced_filter(ass_path, hook, music_path, sfx_events,
-                                       meme_events, start=start, end=end)
+        vf, af = build_enhanced_filter(ass_path, hook, resolved_music, sfx_events,
+                                       meme_events, start=start, end=end,
+                                       angle=angle)
 
         # Build input list
         inputs = ["-i", str(src)]
 
-        if music_path and Path(music_path).exists():
-            inputs.extend(["-i", str(music_path)])
+        if resolved_music and Path(resolved_music).exists():
+            inputs.extend(["-i", str(resolved_music)])
 
         sfx_idx = 2
         if sfx_events:
@@ -792,12 +885,14 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
                 meme_events.append({"t": t, "file": str(meme_file)})
             t += 4.0
     info = render(src, out, ass, hook,
-                  music_path=str(music) if music.exists() else None,
+                  # When angle is provided, let render() resolve music via music_bed_for_angle
+                  music_path=None if clip.get("angle") else (str(music) if music.exists() else None),
                   sfx_events=[e for e in sfx_events if Path(e.get("file", "")).exists()],
                   meme_events=[e for e in meme_events if Path(e.get("file", "")).exists()],
                   start=moment["start"], end=moment["end"],
                   segs=segs if len(segs) > 1 else None,
-                  flashes=flashes if flashes else None)
+                  flashes=flashes if flashes else None,
+                  angle=clip.get("angle"))
     proxy_path = make_proxy(out)
     with conn:
         render_id = _replace_render(conn, clip["id"], "vertical-1080x1920", str(out))
