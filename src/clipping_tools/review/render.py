@@ -208,18 +208,58 @@ def detect_segments(words: list[dict], peaks: list[dict],
                 seg_start = piece_end
                 continue
             seg_type = "normal"
+            speed_ramp = 1.0
             for p in peaks:
-                if seg_start <= float(p["t"]) <= piece_end and float(p["rms"]) > 0.5:
-                    seg_type = "zoom"
-                    break
+                if seg_start <= float(p["t"]) <= piece_end:
+                    rms = float(p["rms"])
+                    if rms > 0.7:
+                        seg_type = "zoom"
+                        speed_ramp = 0.5
+                        break  # dramatic moment takes priority
+                    elif rms < 0.4:
+                        speed_ramp = 1.5
             segments.append({
                 "start": round(seg_start, 2),
                 "end": round(piece_end, 2),
                 "type": seg_type,
+                "speed_ramp": speed_ramp,
             })
             seg_start = piece_end
 
     return segments
+
+
+def flash_overlays(peaks: list[dict], threshold: float = 0.7) -> list[dict]:
+    """Return flash events for energy peaks above threshold.
+
+    Each flash is a 1-frame (0.03s) white overlay at the peak timestamp.
+    Used for impact emphasis on kills, crashes, and other dramatic moments.
+    """
+    flashes = []
+    for p in peaks:
+        if float(p["rms"]) > threshold:
+            flashes.append({
+                "t": float(p["t"]),
+                "duration": 0.03,
+                "type": "flash",
+            })
+    return flashes
+
+
+def speed_ramp_factor(peak: dict) -> float:
+    """Return speed multiplier based on energy peak RMS.
+
+    > 0.7  → 0.5x slow motion  (dramatic kill/fail moment)
+    0.4-0.7 → 1.0x normal speed
+    < 0.4  → 1.5x fast forward (travel/montage, low energy)
+    """
+    rms = float(peak["rms"])
+    if rms > 0.7:
+        return 0.5
+    elif rms >= 0.4:
+        return 1.0
+    else:
+        return 1.5
 
 
 def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
@@ -227,14 +267,26 @@ def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
 
     Returns a list of filter-chain strings (joined by ';' by caller).
     Each chain ends with [fv{N}_bg] and [fv{N}_fg] labels via split=2.
+    Applies speed ramp via setpts when speed_ramp != 1.0.
     """
     start = seg["start"]
     end = seg["end"]
     seg_type = seg.get("type", "normal")
+    speed_ramp = seg.get("speed_ramp", 1.0)
+
+    # Speed ramp: setpts multiplier = 1 / speed_ramp
+    #   speed_ramp=0.5 (slow mo) → *2   (takes 2x longer)
+    #   speed_ramp=1.5 (fast fwd)  → /1.5 (takes 0.67x the time)
+    if speed_ramp == 1.0:
+        pts_expr = "PTS-STARTPTS"
+    elif speed_ramp < 1.0:
+        pts_expr = f"(PTS-STARTPTS)*{1.0 / speed_ramp}"
+    else:
+        pts_expr = f"(PTS-STARTPTS)/{speed_ramp}"
 
     # Base trim chain, ends with a pre-split label
     pre = f"[fv{seg_idx}_pre]"
-    base = f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS{pre}"
+    base = f"[0:v]trim=start={start}:end={end},setpts={pts_expr}{pre}"
 
     if seg_type == "zoom":
         # Zoom in during the segment: 1.0x -> 1.3x
@@ -257,7 +309,8 @@ def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
 
 
 def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
-                       font: str, hook_esc: str) -> tuple[str, str]:
+                       font: str, hook_esc: str,
+                       flashes: list[dict] | None = None) -> tuple[str, str]:
     """Build complete filtergraph from segments: trim + effects + concat + captions.
 
     Returns (video_filter, audio_filter).
@@ -276,8 +329,15 @@ def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
             f"[base]subtitles={ass_path}[cap];"
             f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
             f"fontcolor=white:borderw=5:bordercolor=black:"
-            f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[out]"
+            f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[cap_out]"
         )
+        # Apply flash overlays after captions (single segment path)
+        if flashes:
+            vf = _apply_flash_overlays(vf, "cap_out", flashes)
+            # Rename final output label to [out]
+            vf = vf.replace("[cap_out]", "[out]", 1)
+        else:
+            vf = vf.replace("[cap_out]", "[out]", 1)
     else:
         all_fragments = []
         for i, seg in enumerate(segs):
@@ -295,10 +355,36 @@ def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
             f"[base]subtitles={ass_path}[cap];"
             f"[cap]drawtext=fontfile='{font}':text='{hook_esc}':fontsize=50:"
             f"fontcolor=white:borderw=5:bordercolor=black:"
-            f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[out]"
+            f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[cap_out]"
         )
+        # Apply flash overlays after captions (multi segment path)
+        if flashes:
+            vf = _apply_flash_overlays(vf, "cap_out", flashes)
+            vf = vf.replace("[cap_out]", "[out]", 1)
+        else:
+            vf = vf.replace("[cap_out]", "[out]", 1)
 
     return vf, af
+
+
+def _apply_flash_overlays(vf: str, start_label: str, flashes: list[dict]) -> str:
+    """Chain flash overlays after the given label in the filtergraph.
+
+    Each flash is a 1-frame white screen overlaid at its timestamp.
+    Returns the filtergraph string with the final label renamed to [flash_out{N}].
+    """
+    current_label = start_label
+    for i, flash in enumerate(flashes):
+        t = flash["t"]
+        flash_label = f"[flash{i}]"
+        out_label = f"[flash_out{i}]" if i < len(flashes) - 1 else "[out]"
+        vf += (
+            f";{current_label}color=c=white:s=1080x1920:d={flash['duration']}"
+            f"{flash_label};"
+            f"{current_label}{flash_label}overlay=enable='eq(t,{t})'{out_label}"
+        )
+        current_label = out_label
+    return vf
 
 
 def select_hook_moment(words: list[dict], peaks: list[dict],
@@ -555,7 +641,8 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
            meme_events: list[dict] | None = None,
            start: float | None = None,
            end: float | None = None,
-           segs: list[dict] | None = None) -> dict:
+           segs: list[dict] | None = None,
+           flashes: list[dict] | None = None) -> dict:
     """Full enhanced render for an approved post.
 
     Adds:
@@ -564,13 +651,15 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
     - Meme/reaction PNG overlays at event timestamps
     - Dynamic emphasis via ASS captions
     - Jump-cut pacing via segments (when segs provided)
+    - Impact flashes at high energy peaks (when flashes provided)
     """
     font = font_path()
     hook_esc = hook.replace("'", "\\u2019").replace(":", "\\:")
 
     # Use segment-based pacing when segs provided
     if segs:
-        vf, af = build_paced_filter(segs, str(ass_path), hook, font, hook_esc)
+        vf, af = build_paced_filter(segs, str(ass_path), hook, font, hook_esc,
+                                    flashes=flashes)
         # Paced path: source video only (no music/SFX/memes yet)
         inputs = ["-i", str(src)]
         full_filter = vf.rstrip(";")
@@ -682,6 +771,8 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
     # Detect jump-cut segments for pacing
     clip_duration = words[-1]["end"] if words else 30.0
     segs = detect_segments(words, peaks, clip_duration)
+    # Detect impact flashes at high energy peaks
+    flashes = flash_overlays(peaks, threshold=0.7)
     # Collect asset paths (only used in non-paced path)
     assets = ASSETS_DIR
     music = assets / "audio" / "music_bed.mp3"
@@ -705,7 +796,8 @@ def render_post(post_id: int, db_path: str | Path) -> dict:
                   sfx_events=[e for e in sfx_events if Path(e.get("file", "")).exists()],
                   meme_events=[e for e in meme_events if Path(e.get("file", "")).exists()],
                   start=moment["start"], end=moment["end"],
-                  segs=segs if len(segs) > 1 else None)
+                  segs=segs if len(segs) > 1 else None,
+                  flashes=flashes if flashes else None)
     proxy_path = make_proxy(out)
     with conn:
         render_id = _replace_render(conn, clip["id"], "vertical-1080x1920", str(out))
