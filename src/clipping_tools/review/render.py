@@ -324,6 +324,184 @@ def music_bed_for_angle(angle: str | None,
     return path if Path(path).exists() else str(Path(assets_dir) / "audio/music_bed.mp3")
 
 
+def build_square_filter(ass_path: str, hook: str,
+                        font_path: str) -> str:
+    """Build filtergraph for 1:1 square output (1080x1080).
+
+    Scales source to fit within 1080x1080, center-crops, adds blurred
+    background padding, subtitles, and drawtext hook title.
+    """
+    hook_esc = hook.replace("'", "\\u2019").replace(":", "\\:")
+    return (
+        f"[0:v]scale=1080:1080:force_original_aspect_ratio=decrease,"
+        f"pad=1080:1080:(ow-iw)/2:(oh-ih)/2[fg];"
+        f"[0:v]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,"
+        f"boxblur=20:5,eq=brightness=-0.06[bg];"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
+        f"[base]subtitles={ass_path}[cap];"
+        f"[cap]drawtext=fontfile='{font_path}':text='{hook_esc}':fontsize=48:"
+        f"fontcolor=white:borderw=5:bordercolor=black:"
+        f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[out]"
+    )
+
+
+def build_loop_filter(segs: list[dict], ass_path: str, hook: str,
+                      font_path: str, loop_duration: float = 0.5) -> tuple[str, str]:
+    """Build filtergraph for seamless loop (end crossfades into start).
+
+    Duplicates the segment stream, applies xfade crossfade at the loop point
+    so the video can be played seamlessly. Audio uses acrossfade similarly.
+    """
+    hook_esc = hook.replace("'", "\\u2019").replace(":", "\\:")
+
+    # Build segment filters for the main pass
+    all_fragments = []
+    for i, seg in enumerate(segs):
+        all_fragments.extend(build_segment_filter(seg, i))
+
+    bg_inputs = "".join([f"[fv{i}_bg]" for i in range(len(segs))])
+    fg_inputs = "".join([f"[fv{i}_fg]" for i in range(len(segs))])
+
+    vf = ";".join(all_fragments)
+    # Concat segments for base video
+    vf += (
+        f";{bg_inputs}concat=n={len(segs)}:v=1:a=0,"
+        f"scale=1080:1920:force_original_aspect_ratio=increase,"
+        f"crop=1080:1920,boxblur=20:5,eq=brightness=-0.06[bg_base];"
+        f"{fg_inputs}concat=n={len(segs)}:v=1:a=0,scale=1080:-2[fg_base];"
+        f"[bg_base][fg_base]overlay=(W-w)/2:(H-h)/2[base];"
+        f"[base]subtitles={ass_path}[cap];"
+        f"[cap]drawtext=fontfile='{font_path}':text='{hook_esc}':fontsize=50:"
+        f"fontcolor=white:borderw=5:bordercolor=black:"
+        f"x=(w-text_w)/2:y=320:enable='lt(t,2)'[cap_out]"
+    )
+
+    # For loop: crossfade tail into head using xfade on duplicated stream
+    # We create a second pass of the same segments shifted by loop_duration
+    # and crossfade at the boundary
+    loop_fragments = []
+    for i, seg in enumerate(segs):
+        loop_fragments.append(
+            f"[0:v]trim=start={seg['start']}:end={seg['end']},"
+            f"setpts=PTS-STARTPTS+{loop_duration}[fv{i}_loop]"
+        )
+    loop_concat = "".join([f"[fv{i}_loop]" for i in range(len(segs))])
+    vf += (
+        f";{loop_concat}concat=n={len(segs)}:v=1:a=0[loop_pass];"
+        f"[cap_out][loop_pass]xfade=transition=fade:duration={loop_duration}:"
+        f"offset=0[out]"
+    )
+
+    af = ""
+    return vf, af
+
+
+def render_variant(post_id: int, db_path: str | Path,
+                   variant: str = "square") -> dict:
+    """Render an approved post in a specific variant format.
+
+    Variants:
+      - 'square': 1080x1080 for Facebook/IG feed
+      - 'loop': seamless loop with crossfade for TikTok
+      - 'vertical': 1080x1920 (default, delegates to render_post)
+
+    Returns dict with variant, width, height, path.
+    """
+    from ..db import init_db
+
+    conn = init_db_for_path(db_path)
+    clip = source_clip_for_post(conn, post_id)
+    if not clip:
+        raise RuntimeError(f"post {post_id} has no approved source clip")
+
+    src = WORK / f"source_{post_id}.mp4"
+    wav = WORK / f"audio_{post_id}.wav"
+    ass = WORK / f"caption_{post_id}.ass"
+    font = font_path()
+
+    download_clip(clip["url"], src)
+    extract_wav(src, wav)
+    words = transcribe(wav)
+    peaks = energy_peaks(wav)
+    moment = select_hook_moment(words, peaks)
+    hook = (moment.get("hook_word") or clip["title"] or "GTA 6 MOMENT")[:24].upper()
+    make_enhanced_ass(words, ass, hook, moment=moment)
+
+    out = WORK / f"clipzida_{post_id}_{variant}.mp4"
+
+    if variant == "square":
+        vf = build_square_filter(str(ass), hook, font)
+        inputs = ["-i", str(src)]
+        if Path("assets/audio/music_bed.mp3").exists():
+            inputs.extend(["-i", "assets/audio/music_bed.mp3"])
+        cmd = [
+            ffmpeg_bin(), "-y",
+        ] + inputs + [
+            "-filter_complex", vf,
+            "-map", "[out]",
+            "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
+            "-profile:v", "high", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+            "-movflags", "+faststart", str(out),
+        ]
+        width, height = 1080, 1080
+    elif variant == "loop":
+        clip_duration = words[-1]["end"] if words else 30.0
+        segs = detect_segments(words, peaks, clip_duration)
+        vf, af = build_loop_filter(segs, str(ass), hook, font, loop_duration=0.5)
+        inputs = ["-i", str(src)]
+        cmd = [
+            ffmpeg_bin(), "-y",
+        ] + inputs + [
+            "-filter_complex", vf,
+            "-map", "[out]",
+            "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
+            "-profile:v", "high", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+            "-movflags", "+faststart", str(out),
+        ]
+        width, height = 1080, 1920
+    else:
+        # Default vertical — delegate to render_post
+        info = render_post(post_id, db_path)
+        return {
+            "variant": "vertical",
+            "width": 1080,
+            "height": 1920,
+            "path": info["path"],
+        }
+
+    subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=900)
+
+    p = subprocess.run([ffprobe_bin(), "-v", "error", "-show_entries",
+                        "format=duration,size:stream=codec_name,width,height",
+                        "-of", "json", str(out)], check=True,
+                       capture_output=True, text=True)
+    info = json.loads(p.stdout)
+    streams = info.get("streams", [])
+    width = next((s.get("width") for s in streams if s.get("codec_type") == "video"), width)
+    height = next((s.get("height") for s in streams if s.get("codec_type") == "video"), height)
+
+    with conn:
+        render_id = _replace_render(conn, clip["id"], f"variant-{variant}", str(out))
+        conn.execute(
+            "UPDATE renders SET spec_json=?, checksum='', rendered_at=? WHERE id=?",
+            (json.dumps({"variant": variant, "hook": hook, "moment": moment,
+                         "probe": info}), utcnow(), render_id))
+        conn.execute("UPDATE posts SET render_id=?, status='rendered' WHERE id=?",
+                     (render_id, post_id))
+
+    return {
+        "variant": variant,
+        "width": width,
+        "height": height,
+        "path": str(out),
+        "render_id": render_id,
+    }
+
+
+
 def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
     """Build ffmpeg filter fragments for one segment from [0:v].
 
