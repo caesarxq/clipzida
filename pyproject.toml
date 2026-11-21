@@ -4,12 +4,15 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "discord-py>=2.4",
+    "fastapi>=0.115",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "numpy>=2.4.6",
     "pydantic>=2.14.4",
+    "python-multipart>=0.0.20",
     "pyyaml>=6.0",
     "typer>=0.29.2",
+    "uvicorn>=0.34",
     "yt-dlp>=2026.1",
 ]
 

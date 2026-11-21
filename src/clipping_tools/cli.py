@@ -302,6 +302,13 @@ def metrics_collect(platform: Optional[str] = None) -> None:
 
 
 @app.command()
+def tiktok_web(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Run the TikTok posting web UI (Login Kit + Direct Post posting screen)."""
+    from .publish.tiktok_web import run
+    run(host=host, port=port)
+
+
+@app.command()
 def cycle() -> None:
     """Run one autonomous pipeline pass (ingest -> review -> render -> publish)."""
     import asyncio

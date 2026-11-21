@@ -21,14 +21,22 @@ STATUS = f"{BASE}/status/fetch/"
 
 
 def build_post_info(post: dict) -> dict:
-    hook = str(post.get("caption") or "").strip() or "GTA 6 moment"
+    # Editable title: the posting form sends the final title; hashtags are
+    # appended only if the user removed them (brand default, still editable).
+    title = str(post.get("title") or post.get("caption") or "").strip() or "GTA 6 moment"
+    tags = "#gta6 #shorts"
+    if tags not in title:
+        title = f"{title[:200 - len(tags) - 1]} {tags}"
     return {
-        "title": f"{hook[:150]} #gta6 #shorts",
-        "description": f"{hook} #gta6 #gta6clips #fyp",
-        "privacy_level": "SELF_ONLY",  # pre-audit: private only
-        "disable_comment": False,
-        "disable_stitch": False,
-        "disable_duet": False,
+        "title": title,
+        "description": f"{title} #gta6 #gta6clips #fyp",
+        # Default SELF_ONLY pre-audit; the posting form sends the user's
+        # explicit choice (unaudited clients are limited to SELF_ONLY anyway).
+        "privacy_level": post.get("privacy_level") or "SELF_ONLY",
+        # Interaction toggles default OFF on the form → disabled unless user opted in.
+        "disable_comment": not post.get("allow_comment"),
+        "disable_stitch": not post.get("allow_stitch"),
+        "disable_duet": not post.get("allow_duet"),
     }
 
 
