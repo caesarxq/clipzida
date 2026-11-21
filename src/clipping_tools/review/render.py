@@ -188,8 +188,8 @@ def select_hook_moment(words: list[dict], peaks: list[dict],
             best_start = t
         t += step
 
-    start = max(0.0, best_start)
-    end = min(start + duration, words[-1]["end"])
+    start = float(max(0.0, best_start))
+    end = float(min(start + duration, words[-1]["end"]))
     # Identify the best hook word within the window (highest _word_score)
     hook_word = ""
     hook_word_score = -1.0
