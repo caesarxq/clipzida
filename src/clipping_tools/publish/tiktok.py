@@ -105,7 +105,24 @@ def publish_to_tiktok(post_id: int, db_path, video_path: str, *, access_token: s
         raise RuntimeError(f"post {post_id} not found")
     token = access_token or os.environ.get("TIKTOK_ACCESS_TOKEN", "")
     if not token:
-        raise RuntimeError("TIKTOK_ACCESS_TOKEN not set")
+        # Fall back to DB tokens table (set by OAuth Login Kit flow)
+        from ..db import init_db
+        conn = init_db(db_path)
+        row = conn.execute(
+            "SELECT access_token, refresh_token, expires_at FROM tokens WHERE service='tiktok'"
+        ).fetchone()
+        if row and row["expires_at"]:
+            from datetime import datetime, timezone
+            expires = datetime.fromisoformat(row["expires_at"])
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) < expires:
+                token = row["access_token"]
+        if not token and row and row["refresh_token"]:
+            # TODO: implement TikTok refresh token exchange
+            pass
+    if not token:
+        raise RuntimeError("TIKTOK_ACCESS_TOKEN not set — complete TikTok OAuth Login Kit flow first")
     publish_id, upload_url = init_publish(token, dict(post), video_path,
                                           transport=transport, mode=mode)
     upload_video(upload_url, video_path, transport=transport)

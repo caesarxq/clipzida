@@ -74,7 +74,8 @@ def _require_env() -> None:
 def _get_access_token(conn) -> str:
     """Get a valid X access token from the DB tokens table, refreshing if needed.
 
-    Falls back to X_ACCESS_TOKEN env var if no DB row exists.
+    Falls back to X_ACCESS_TOKEN env var (with X_ACCESS_TOKEN_SECRET as refresh
+    token) if no DB row exists.
     """
     row = conn.execute(
         "SELECT access_token, refresh_token, expires_at FROM tokens WHERE service='x'"
@@ -83,17 +84,45 @@ def _get_access_token(conn) -> str:
         expires = datetime.fromisoformat(row["expires_at"])
         if datetime.now(timezone.utc) < expires:
             return row["access_token"]
-    # Try refresh
+    # Try DB refresh token first
     if row and row["refresh_token"]:
         return _refresh_token(conn, row["refresh_token"])
-    # Fall back to env var
+    # Fall back to env var access token
     token = os.environ.get("X_ACCESS_TOKEN")
     if token:
+        # Try refreshing using env var refresh token (X_ACCESS_TOKEN_SECRET)
+        refresh = os.environ.get("X_ACCESS_TOKEN_SECRET")
+        if refresh:
+            try:
+                return _refresh_token_env(refresh)
+            except Exception:  # noqa: BLE001 — refresh failed, use stale token
+                pass
         return token
     raise RuntimeError(
         "X access token not found — complete OAuth 2.0 authorization flow first "
         "(see docs/X_SETUP_GUIDE.md)"
     )
+
+
+def _refresh_token_env(refresh_token: str) -> str:
+    """Refresh an expired X access token using env var credentials."""
+    client_id = os.environ["X_CLIENT_ID"]
+    client_secret = os.environ["X_CLIENT_SECRET"]
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    # X token endpoint requires Basic Auth header: client_id:client_secret
+    import base64
+    basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    resp = httpx.post(TOKEN_URL, data=data, headers={
+        "Authorization": f"Basic {basic}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["access_token"]
 
 
 def _refresh_token(conn, refresh_token: str) -> str:

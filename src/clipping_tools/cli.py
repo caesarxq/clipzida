@@ -434,7 +434,7 @@ def cycle() -> None:
     def _publish_text(post_id, db_path):
         """Publish a text-only news post to X."""
         from clipping_tools.publish.x import create_post
-        from ..db import init_db as _init_db
+        from .db import init_db as _init_db
         conn = _init_db(db_path)
         post = conn.execute(
             "SELECT id, caption, external_post_id FROM posts WHERE id=?", (post_id,)

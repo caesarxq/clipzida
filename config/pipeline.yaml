@@ -35,7 +35,7 @@ render:
   max_concurrent_jobs: 1
 
 publish:
-  targets: [youtube, x]   # add tiktok once TIKTOK_ACCESS_TOKEN is set
+  targets: [youtube, x, tiktok]   # add tiktok once TIKTOK_ACCESS_TOKEN is set
   slots: {start: "12:00", end: "23:00", tz: "Africa/Nairobi"}
   jitter_minutes: 7
   launch_wave_mode: asap
