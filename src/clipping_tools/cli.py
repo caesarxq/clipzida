@@ -364,7 +364,7 @@ def cycle() -> None:
         min_views_for_kill = int(mcfg.get("min_views_for_kill", 50))
         avg_ret = get_avg_retention(str(db_path), post_id=post_id)
         # Count views across all metrics rows for this post
-        from ..db import init_db as _init_db
+        from .db import init_db as _init_db
         conn = _init_db(db_path)
         vrow = conn.execute(
             "SELECT SUM(views) AS total_views FROM metrics WHERE post_id=?",
