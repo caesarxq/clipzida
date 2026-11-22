@@ -294,16 +294,29 @@ def publish(request: Request, post_id: int = Form(...), title: str = Form(...),
 
     payload = dict(post)
     payload["caption"] = title
-    publish_id, upload_url = init_publish(
-        tok["access_token"], payload, path, transport=None, mode="direct")
-    # override post_info built by adapter with the form's choices
-    upload_video(upload_url, path, transport=None)
-
-    status = ""
-    for _ in range(30):
-        status = fetch_status(tok["access_token"], publish_id, transport=None)
-        if status in {"PUBLISH_COMPLETE", "FAILED"}:
-            break
+    payload["privacy_level"] = privacy_level
+    payload["allow_comment"] = bool(allow_comment)
+    payload["allow_duet"] = bool(allow_duet)
+    payload["allow_stitch"] = bool(allow_stitch)
+    try:
+        publish_id, upload_url = init_publish(
+            tok["access_token"], payload, path, transport=None, mode="direct")
+        import os
+        upload_video(upload_url, path, transport=None, total_bytes=os.path.getsize(path))
+        status = ""
+        for _ in range(30):
+            status = fetch_status(tok["access_token"], publish_id, transport=None)
+            if status in {"PUBLISH_COMPLETE", "FAILED"}:
+                break
+    except Exception as exc:
+        return _page("Error", f"""
+            <div class="logo">CLIPZIDA</div>
+            <h1 class="err">TikTok upload failed</h1>
+            <p>{str(exc)[:400]}</p>
+            <p class="notice">Nothing was posted. You can return to the posting
+               screen and try again.</p>
+            <p><a href="/post">Back to posting screen</a></p>
+        """)
 
     conn = init_db(DB_PATH)
     with conn:

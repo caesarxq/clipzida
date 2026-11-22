@@ -60,11 +60,22 @@ def init_publish(access_token: str, post: dict, video_path: str, *,
     return str(data.get("publish_id", "")), str(data.get("upload_url", ""))
 
 
-def upload_video(upload_url: str, video_path: str, *, transport=None) -> None:
+def upload_video(upload_url: str, video_path: str, *, transport=None,
+                 total_bytes: int | None = None) -> None:
+    """Upload the video bytes to TikTok's presigned upload URL.
+
+    TikTok requires a Content-Range header even for single-chunk uploads:
+    `bytes 0-<size-1>/<size>`. Without it the upload endpoint returns 416.
+    """
     http = transport or httpx
     with open(video_path, "rb") as fh:
-        resp = http.put(upload_url, content=fh.read(),
-                        headers={"Content-Type": "video/mp4"}, timeout=600)
+        body = fh.read()
+    size = total_bytes if total_bytes is not None else len(body)
+    resp = http.put(upload_url, content=body,
+                    headers={
+                        "Content-Type": "video/mp4",
+                        "Content-Range": f"bytes 0-{size - 1}/{size}",
+                    }, timeout=600)
     resp.raise_for_status()
 
 

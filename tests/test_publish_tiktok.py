@@ -77,3 +77,14 @@ def test_publish_to_tiktok_writes_back_external_id():
     assert result["publish_id"] == "pub9"
     conn = init_db(db)
     assert conn.execute("SELECT status FROM posts WHERE id=7").fetchone()[0] == "published"
+
+
+def test_upload_video_sends_content_range_header(tmp_path):
+    """TikTok requires Content-Range bytes 0-N/N even for single-chunk uploads."""
+    f = tmp_path / "x.mp4"
+    f.write_bytes(b"x" * 100)
+    transport = MagicMock()
+    transport.put.return_value = _resp({"data": {}})
+    upload_video("https://up", str(f), transport=transport)
+    headers = transport.put.call_args.kwargs["headers"]
+    assert headers["Content-Range"] == "bytes 0-99/100"
