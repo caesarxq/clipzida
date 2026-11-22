@@ -435,7 +435,7 @@ def render_variant(post_id: int, db_path: str | Path,
         if Path("assets/audio/music_bed.mp3").exists():
             inputs.extend(["-i", "assets/audio/music_bed.mp3"])
         cmd = [
-            ffmpeg_bin(), "-y",
+            ffmpeg_bin(), "-y", "-filter_complex_threads", "2",
         ] + inputs + [
             "-filter_complex", vf,
             "-map", "[out]",
@@ -451,7 +451,7 @@ def render_variant(post_id: int, db_path: str | Path,
         vf, af = build_loop_filter(segs, str(ass), hook, font, loop_duration=0.5)
         inputs = ["-i", str(src)]
         cmd = [
-            ffmpeg_bin(), "-y",
+            ffmpeg_bin(), "-y", "-filter_complex_threads", "2",
         ] + inputs + [
             "-filter_complex", vf,
             "-map", "[out]",
@@ -502,7 +502,7 @@ def render_variant(post_id: int, db_path: str | Path,
 
 
 
-def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
+def build_segment_filter(seg: dict, seg_idx: int, input_label: str = "[0:v]") -> list[str]:
     """Build ffmpeg filter fragments for one segment from [0:v].
 
     Returns a list of filter-chain strings (joined by ';' by caller).
@@ -526,7 +526,7 @@ def build_segment_filter(seg: dict, seg_idx: int) -> list[str]:
 
     # Base trim chain, ends with a pre-split label
     pre = f"[fv{seg_idx}_pre]"
-    base = f"[0:v]trim=start={start}:end={end},setpts={pts_expr}{pre}"
+    base = f"{input_label}trim=start={start}:end={end},setpts={pts_expr}{pre}"
 
     if seg_type == "zoom":
         # Zoom in during the segment: 1.0x -> 1.3x
@@ -579,9 +579,14 @@ def build_paced_filter(segs: list[dict], ass_path: str, hook: str,
         else:
             vf = vf.replace("[cap_out]", "[out]", 1)
     else:
-        all_fragments = []
+        # One decode + split: N separate [0:v]trim branches spawn N full
+        # HEVC decoders (~7GB RSS on 8GB VPS -> OOM kill). Split once instead.
+        split_prefix = "[0:v]split=" + str(len(segs)) + "".join(
+            f"[vin{i}]" for i in range(len(segs))
+        )
+        all_fragments = [split_prefix]
         for i, seg in enumerate(segs):
-            all_fragments.extend(build_segment_filter(seg, i))
+            all_fragments.extend(build_segment_filter(seg, i, input_label=f"[vin{i}]"))
         bg_inputs = "".join([f"[fv{i}_bg]" for i in range(len(segs))])
         fg_inputs = "".join([f"[fv{i}_fg]" for i in range(len(segs))])
         vf = ";".join(all_fragments)
@@ -935,7 +940,7 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
         full_filter = vf.rstrip(";")
         # Map video from concat output, copy audio from source
         cmd = [
-            ffmpeg_bin(), "-y",
+            ffmpeg_bin(), "-y", "-filter_complex_threads", "2",
         ]
         cmd.extend(inputs)
         cmd.extend(["-filter_complex", full_filter])
@@ -979,7 +984,7 @@ def render(src: Path, out: Path, ass_path: Path, hook: str,
             full_filter += ";" + af
 
         cmd = [
-            ffmpeg_bin(), "-y",
+            ffmpeg_bin(), "-y", "-filter_complex_threads", "2",
         ]
         # Add inputs
         cmd.extend(inputs)

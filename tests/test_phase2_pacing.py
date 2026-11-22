@@ -155,3 +155,22 @@ def test_word_score_low_for_normal_word():
     peaks = [{"t": 10.0, "rms": 0.1}]   # energy far away
     s = _word_score(w, peaks)
     assert s < 1.0, f"score={s} too high for normal word"
+
+
+def test_build_paced_filter_single_decode_split():
+    """Multi-segment graph must split once, not spawn N decoders (OOM fix)."""
+    segs = [
+        {"start": 0.0, "end": 0.5, "type": "normal"},
+        {"start": 1.0, "end": 1.5, "type": "normal"},
+        {"start": 2.0, "end": 2.5, "type": "normal"},
+    ]
+    vf, af = build_paced_filter(segs, ass_path="/tmp/c.ass", hook="T",
+                                font=font_path(), hook_esc="T")
+    assert "[0:v]split=3" in vf, "must split source once"
+    assert "[vin0]trim=" in vf and "[vin2]trim=" in vf, "segments read from split"
+    assert "[0:v]trim=" not in vf, "no separate decoders"
+
+def test_build_segment_filter_custom_input_label():
+    seg = {"start": 0.0, "end": 1.0, "type": "normal"}
+    frags = build_segment_filter(seg, 4, input_label="[vin4]")
+    assert any("[vin4]trim=" in f for f in frags)
