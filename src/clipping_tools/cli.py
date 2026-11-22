@@ -352,20 +352,8 @@ def cycle() -> None:
                 typer.echo(f"ingest: {len(clips)} fetched")
             else:
                 typer.echo("ingest: Twitch health check failed, skipping clips")
-        except Exception as e:  # noqa: BLE001 — Twitch must not block news ingest
+        except Exception as e:  # noqa: BLE001 — Twitch must not block the cycle
             typer.echo(f"ingest: Twitch error ({e}), skipping clips")
-        # News ingest: official GTA 6 sources → review drafts
-        from .ingest.news import fetch_news_items, init_post
-        from .db import init_db
-        conn = init_db(ROOT / "data" / "state.db")
-        items = fetch_news_items()
-        new = 0
-        for item in items:
-            if init_post(conn, item):
-                new += 1
-        conn.commit()
-        conn.close()
-        typer.echo(f"ingest_news: {len(items)} fetched, {new} new drafts")
 
     def _review_publish():
         asyncio.run(_review_publish_async())

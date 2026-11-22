@@ -69,6 +69,8 @@ def init_db(path: str | Path) -> sqlite3.Connection:
         conn.execute("ALTER TABLE posts ADD COLUMN review_message_id TEXT")
     if "angle" not in existing:
         conn.execute("ALTER TABLE posts ADD COLUMN angle TEXT")
+    if "review_proxy_path" not in existing:
+        conn.execute("ALTER TABLE posts ADD COLUMN review_proxy_path TEXT")
     return conn
 
 

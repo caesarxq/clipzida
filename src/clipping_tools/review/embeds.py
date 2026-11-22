@@ -27,7 +27,7 @@ def _badge(value: str) -> str:
     return f"{mark} {value}"
 
 
-def build_review_embed(post: dict) -> discord.Embed:
+def build_review_embed(post: dict, has_video: bool = False) -> discord.Embed:
     """Build a review embed with enough evidence to approve/reject confidently.
 
     The post dict may carry clip fields (broadcaster, duration, view_count,
@@ -93,7 +93,9 @@ def build_review_embed(post: dict) -> discord.Embed:
         )
         embed.add_field(
             name="Preview",
-            value="Master MP4 on VPS — review before approving",
+            value="📹 Video attached below — watch before approving"
+            if has_video
+            else "Master MP4 on VPS — review before approving",
             inline=False,
         )
 

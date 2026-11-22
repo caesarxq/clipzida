@@ -52,7 +52,7 @@ def test_fetch_youtube_metrics_returns_stats(monkeypatch):
 def test_fetch_youtube_metrics_missing_key(monkeypatch):
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     m = fetch_youtube_metrics("ytvid123")
-    assert m["error"] == "no api key"
+    assert m["error"] == "no api key or oauth token"
 
 
 def test_fetch_youtube_metrics_empty_items(monkeypatch):
