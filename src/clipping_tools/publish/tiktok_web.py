@@ -224,7 +224,7 @@ def post_screen() -> Response:
             <div class="check"><input type="checkbox" name="disclosure" id="disc">
               <span>Disclose as promotional content / paid partnership</span></div>
 
-            <div class="check"><input type="checkbox" id="consent">
+            <div class="check"><input type="checkbox" name="consent" id="consent">
               <span>I confirm I own or have rights to this video and consent to
                     posting it to my TikTok account.</span></div>
 
