@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://caesarxq.github.io/clipzida/sitemap.xml

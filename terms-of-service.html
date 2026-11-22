@@ -1,147 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="CLIPZIDA Terms of Service — Rules and guidelines for using our website and content.">
-    <title>Terms of Service — CLIPZIDA</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0a0a0b;
-            color: #ffffff;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 0 24px;
-        }
-        header {
-            padding: 50px 0 30px;
-            text-align: center;
-        }
-        .logo {
-            font-size: 2.5rem;
-            font-weight: 900;
-            letter-spacing: -2px;
-            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 12px;
-        }
-        .back {
-            display: inline-block;
-            color: #ff6b6b;
-            text-decoration: none;
-            font-weight: 600;
-            margin-bottom: 24px;
-            transition: opacity 0.2s;
-        }
-        .back:hover { opacity: 0.7; }
-        main {
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 12px;
-            padding: 40px 32px;
-            margin-bottom: 60px;
-        }
-        h1 {
-            font-size: 1.75rem;
-            margin-bottom: 24px;
-            color: #ffffff;
-        }
-        h2 {
-            font-size: 1.25rem;
-            margin: 28px 0 12px;
-            color: #ffffff;
-        }
-        p {
-            color: #a1a1aa;
-            margin-bottom: 16px;
-            font-size: 1rem;
-            line-height: 1.7;
-        }
-        ul {
-            color: #a1a1aa;
-            margin-bottom: 20px;
-            padding-left: 24px;
-        }
-        li { margin-bottom: 10px; }
-        .effective {
-            font-size: 0.85rem;
-            color: #71717a;
-            font-style: italic;
-            margin-top: 32px;
-            padding-top: 20px;
-            border-top: 1px solid #27272a;
-        }
-        @media (max-width: 600px) {
-            .container { padding: 0 16px; }
-            main { padding: 28px 20px; }
-            .logo { font-size: 2rem; }
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050508">
+  <title>Terms of Service — CLIPZIDA</title>
+  <meta name="description" content="CLIPZIDA Terms of Service — governing your access to and use of the CLIPZIDA website and published content.">
+
+  <!-- Open Graph / social cards -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://caesarxq.github.io/clipzida/terms-of-service.html">
+  <meta property="og:title" content="Terms of Service — CLIPZIDA">
+  <meta property="og:description" content="CLIPZIDA Terms of Service — governing your access to and use of the CLIPZIDA website and published content.">
+  <meta property="og:image" content="https://caesarxq.github.io/clipzida/assets/brand/clipzida_logo.png">
+  <meta property="og:image:width" content="1024">
+  <meta property="og:image:height" content="1024">
+  <meta property="og:site_name" content="CLIPZIDA">
+  <meta property="og:locale" content="en_US">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@clipzida">
+  <meta name="twitter:title" content="Terms of Service — CLIPZIDA">
+  <meta name="twitter:description" content="CLIPZIDA Terms of Service — governing your access to and use of the CLIPZIDA website and published content.">
+  <meta name="twitter:image" content="https://caesarxq.github.io/clipzida/assets/brand/clipzida_logo.png">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/clipzida/assets/brand/clipzida_logo.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/clipzida/assets/brand/clipzida_logo.png">
+  <link rel="apple-touch-icon" href="/clipzida/assets/brand/clipzida_logo.png">
+
+  <style>
+    :root {
+      --bg: #050508;
+      --card: #0a0a0f;
+      --card-border: #1a1a26;
+      --ink: #f2f2f7;
+      --muted: #9a9ab0;
+      --accent-pink: #ec4899;
+      --accent-cyan: #06b6d4;
+      --accent-gradient: linear-gradient(135deg, #ec4899 0%, #06b6d4 100%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 17px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 56px 20px 80px;
+    }
+    header {
+      margin-bottom: 32px;
+    }
+    .logo-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      margin-bottom: 12px;
+    }
+    .logo-img-small {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+    }
+    .logo-text {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    h1 {
+      font-size: 26px;
+      margin: 0 0 8px;
+      color: var(--ink);
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .content {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 28px 26px;
+    }
+    h2 {
+      font-size: 16px;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      color: var(--ink);
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 6px;
+    }
+    h2:first-child { margin-top: 0; border: none; }
+    p {
+      margin-bottom: 14px;
+      color: var(--ink);
+      line-height: 1.75;
+    }
+    ul {
+      margin-bottom: 14px;
+      padding-left: 1.4rem;
+      color: var(--ink);
+    }
+    li {
+      margin-bottom: 6px;
+    }
+    a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    .back {
+      display: inline-block;
+      margin-top: 26px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .back:hover { color: var(--ink); }
+    .effective {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 20px;
+    }
+    @media (max-width: 480px) {
+      .wrap { padding: 40px 16px 64px; }
+    }
+  </style>
 </head>
 <body>
+  <div class="wrap">
+    <header>
+      <a href="/clipzida/" class="logo-link">
+        <img src="/clipzida/assets/brand/clipzida_logo.png" alt="CLIPZIDA" class="logo-img-small">
+        <span class="logo-text">CLIPZIDA</span>
+      </a>
+      <h1>Terms of Service</h1>
+      <div class="subtitle">Last updated: November 21, 2026</div>
+    </header>
 
-<header>
-    <div class="container">
-        <a href="/" class="back">← Back to CLIPZIDA</a>
-        <div class="logo">CLIPZIDA</div>
+    <div class="content">
+      <h2>1. Acceptance of Terms</h2>
+      <p>By accessing and using CLIPZIDA (the "Service"), you agree to be bound by these Terms of Service. If you do not agree, please discontinue use immediately.</p>
+
+      <h2>2. Description of Service</h2>
+      <p>CLIPZIDA is an autonomous clipping pipeline that curates and publishes GTA 6 video clips from licensed streamer broadcasts. We do not host or distribute copyrighted gameplay footage ourselves; we aggregate and transform clips under applicable fair use and platform licensing terms.</p>
+
+      <h2>3. Content Licensing</h2>
+      <p>All clips featured on CLIPZIDA are sourced from streamers who participate in campaign content reward programs or have granted explicit licensing permission. We do not use unlicensed gameplay footage.</p>
+
+      <h2>4. User Conduct</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Use the Service for any unlawful purpose;</li>
+        <li>Attempt to interfere with the proper working of the Service;</li>
+        <li>Re-upload or redistribute clips without attribution to the original creator.</li>
+      </ul>
+
+      <h2>5. Intellectual Property</h2>
+      <p>All original CLIPZIDA branding, design, and code is owned by CLIPZIDA. Third-party video content remains the property of its respective creators and rights holders.</p>
+
+      <h2>6. Limitation of Liability</h2>
+      <p>CLIPZIDA is provided "as is" without warranties of any kind. To the fullest extent permitted by law, CLIPZIDA disclaims all warranties, express or implied, including merchantability and fitness for a particular purpose.</p>
+
+      <h2>7. Termination</h2>
+      <p>We may suspend or terminate access to the Service at our discretion, without prior notice, for violation of these Terms.</p>
+
+      <h2>8. Governing Law</h2>
+      <p>These Terms are governed by the laws of Kenya, without regard to conflict of law principles.</p>
+
+      <h2>9. Contact</h2>
+      <p>If you have questions about these Terms, contact us at <a href="mailto:clipzida@gmail.com">clipzida@gmail.com</a>.</p>
+
+      <div class="effective">Effective date: November 21, 2026</div>
     </div>
-</header>
 
-<main>
-    <div class="container">
-        <h1>Terms of Service</h1>
-        <p><strong>Effective date:</strong> November 21, 2026</p>
-
-        <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using the CLIPZIDA website and content, you agree to these Terms of Service. If you do not agree, please discontinue use immediately.</p>
-
-        <h2>2. About Our Content</h2>
-        <p>CLIPZIDA curates and republishes short-form video clips featuring GTA 6 gameplay. All content is sourced from licensed streamers and campaign-registered creators who have granted permission for their clips to be edited and redistributed.</p>
-        <p>We do not host original gameplay footage or claim ownership of the source material. All rights in the original content remain with the respective creators and rights holders.</p>
-
-        <h2>3. Intellectual Property</h2>
-        <p>The CLIPZIDA name, logo, branding, and edited compilations are owned by CLIPZIDA. You may not reproduce, distribute, or create derivative works from our edited content without written permission.</p>
-
-        <h2>4. Platform Use</h2>
-        <p>Our clips are published on third-party platforms including YouTube, X/Twitter, TikTok, and Instagram. Your use of those platforms is governed by their respective terms of service.</p>
-
-        <h2>5. User Conduct</h2>
-        <p>You agree not to:</p>
-        <ul>
-            <li>Use the site for any unlawful purpose</li>
-            <li>Attempt to interfere with the proper working of the site</li>
-            <li>Post or transmit harmful, abusive, or infringing content</li>
-        </ul>
-
-        <h2>6. Disclaimer of Warranties</h2>
-        <p>The site and content are provided "as is" without warranties of any kind, express or implied. We do not guarantee the accuracy, completeness, or timeliness of any content.</p>
-
-        <h2>7. Limitation of Liability</h2>
-        <p>To the fullest extent permitted by law, CLIPZIDA shall not be liable for any indirect, incidental, or consequential damages arising out of your use of the site or content.</p>
-
-        <h2>8. Termination</h2>
-        <p>We reserve the right to suspend or terminate access to the site at our sole discretion, without notice.</p>
-
-        <h2>9. Governing Law</h2>
-        <p>These terms are governed by the laws of Kenya, without regard to conflict of law principles.</p>
-
-        <h2>10. Changes to These Terms</h2>
-        <p>We may update these Terms of Service from time to time. Continued use of the site after changes are posted constitutes acceptance of the revised terms.</p>
-
-        <h2>11. Contact Us</h2>
-        <p>If you have questions about these Terms of Service, contact us at: <strong>legal@clipzida.com</strong></p>
-
-        <p class="effective">These terms were last updated on November 21, 2026.</p>
-    </div>
-</main>
-
+    <a href="/clipzida/" class="back">← Back to CLIPZIDA</a>
+  </div>
 </body>
 </html>
