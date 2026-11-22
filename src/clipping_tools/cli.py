@@ -123,6 +123,23 @@ def ingest(hours: float = 24.0, dry_run: bool = True) -> None:
 
 
 @app.command()
+def ingest_news() -> None:
+    """Fetch GTA 6 news from official sources (Rockstar Newswire, Reddit r/GTA6)
+    and create review drafts. News posts are text-only and publish to X."""
+    from clipping_tools.ingest.news import fetch_news_items, init_post
+    from .db import init_db
+    conn = init_db(ROOT / "data" / "state.db")
+    items = fetch_news_items()
+    new = 0
+    for item in items:
+        if init_post(conn, item):
+            new += 1
+    conn.commit()
+    conn.close()
+    typer.echo(f"INGEST_NEWS fetched={len(items)} new={new}")
+
+
+@app.command()
 def campaigns() -> None:
     """List the seeded campaign registry."""
     import yaml
@@ -321,18 +338,34 @@ def cycle() -> None:
         from datetime import datetime, timedelta, timezone
         from .sources.twitch import TwitchClient
         client = TwitchClient()
-        if not await client.health():
-            raise typer.Exit("Twitch auth failed")
-        since = datetime.now(timezone.utc) - timedelta(hours=24)
-        clips = await client.fetch_candidates(since)
-        import yaml
-        cfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text())
-        threshold = float(cfg.get("prefilter", {}).get("score_threshold", 0.35))
-        camp = yaml.safe_load((ROOT / "config/campaigns.yaml").read_text())
-        from .ingest_policy import licensed_from_campaigns
-        licensed = licensed_from_campaigns(camp.get("campaigns", []))
-        _persist_candidates(ROOT / "data/state.db", clips, threshold, dry_run=False, licensed=licensed)
-        typer.echo(f"ingest: {len(clips)} fetched")
+        try:
+            if await client.health():
+                since = datetime.now(timezone.utc) - timedelta(hours=24)
+                clips = await client.fetch_candidates(since)
+                import yaml
+                cfg = yaml.safe_load((ROOT / "config/pipeline.yaml").read_text())
+                threshold = float(cfg.get("prefilter", {}).get("score_threshold", 0.35))
+                camp = yaml.safe_load((ROOT / "config/campaigns.yaml").read_text())
+                from .ingest_policy import licensed_from_campaigns
+                licensed = licensed_from_campaigns(camp.get("campaigns", []))
+                _persist_candidates(ROOT / "data" / "state.db", clips, threshold, dry_run=False, licensed=licensed)
+                typer.echo(f"ingest: {len(clips)} fetched")
+            else:
+                typer.echo("ingest: Twitch health check failed, skipping clips")
+        except Exception as e:  # noqa: BLE001 — Twitch must not block news ingest
+            typer.echo(f"ingest: Twitch error ({e}), skipping clips")
+        # News ingest: official GTA 6 sources → review drafts
+        from .ingest.news import fetch_news_items, init_post
+        from .db import init_db
+        conn = init_db(ROOT / "data" / "state.db")
+        items = fetch_news_items()
+        new = 0
+        for item in items:
+            if init_post(conn, item):
+                new += 1
+        conn.commit()
+        conn.close()
+        typer.echo(f"ingest_news: {len(items)} fetched, {new} new drafts")
 
     def _review_publish():
         asyncio.run(_review_publish_async())
@@ -351,6 +384,13 @@ def cycle() -> None:
 
     def _render(post_id, db_path):
         from .review.render import render_post
+        # News posts are text-only (render_id NULL) — nothing to render.
+        conn = db.init_db(db_path)
+        row = conn.execute("SELECT render_id FROM posts WHERE id=?", (post_id,)).fetchone()
+        conn.close()
+        if row and row["render_id"] is None:
+            typer.echo(f"  SKIP render post {post_id}: text-only post")
+            return
         render_post(post_id, db_path)
 
     def _publish(post_id, db_path, path, platform):
@@ -391,6 +431,28 @@ def cycle() -> None:
         from .review.warmup import record_publish
         record_publish(_init_db2(db_path), platform, os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None)
 
+    def _publish_text(post_id, db_path):
+        """Publish a text-only news post to X."""
+        from clipping_tools.publish.x import create_post
+        from ..db import init_db as _init_db
+        conn = _init_db(db_path)
+        post = conn.execute(
+            "SELECT id, caption, external_post_id FROM posts WHERE id=?", (post_id,)
+        ).fetchone()
+        if not post or post["external_post_id"]:
+            return
+        token = os.environ.get("X_ACCESS_TOKEN")
+        if not token:
+            raise RuntimeError("X_ACCESS_TOKEN not set")
+        created = create_post(post["caption"], [], token)
+        ext = str(created["id"])
+        with conn:
+            conn.execute(
+                "UPDATE posts SET external_post_id=?, status='published', published_at=? WHERE id=?",
+                (ext, utcnow(), post_id),
+            )
+        typer.echo(f"  PUBLISHED text post {post_id} to X ({ext})")
+
     def _gate(conn, platform, account):
         from .review.warmup import can_publish
         return can_publish(conn, platform, account)
@@ -403,6 +465,22 @@ def cycle() -> None:
                        publish_account=os.environ.get("YOUTUBE_CHANNEL_HANDLE") or None,
                        targets=targets)
     typer.echo(f"CYCLE_OK rendered={result['rendered']} published={result['published']}")
+
+    # Publish approved text-only news posts to X
+    conn = db.init_db(ROOT / "data" / "state.db")
+    news_posts = conn.execute(
+        "SELECT id FROM posts WHERE status='approved' AND render_id IS NULL AND platform='x'"
+    ).fetchall()
+    conn.close()
+    text_published = 0
+    for row in news_posts:
+        try:
+            _publish_text(row["id"], ROOT / "data" / "state.db")
+            text_published += 1
+        except Exception as e:
+            typer.echo(f"  publish failed text post {row['id']}: {e}")
+    if text_published:
+        typer.echo(f"CYCLE_OK text_published={text_published}")
 
     # Auto-optimize: switch default angle if another performs significantly better
     import yaml
