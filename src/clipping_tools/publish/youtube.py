@@ -20,10 +20,12 @@ def build_upload_metadata(post: dict) -> dict:
     """Shorts-friendly snippet: title with #Shorts, hashtags in description, gaming category."""
     hook = str(post.get("caption") or "").strip() or "GTA 6 moment"
     hashtags = str(post.get("hashtags") or "#gta6 #gta6clips #shorts")
+    broadcaster = str(post.get("broadcaster") or "").strip()
+    credit = f"\n🎥 Gameplay by @{broadcaster} (Twitch)" if broadcaster else ""
     return {
         "snippet": {
             "title": f"{hook[:90]} #Shorts",
-            "description": f"{hook}\n\n{hashtags} #Shorts #fyp",
+            "description": f"{hook}\n\n{hashtags} #Shorts #fyp{credit}",
             "tags": ["gta6", "gta6clips", "shorts", "gaming"],
             "categoryId": CATEGORY_GAMING,
         },
@@ -52,7 +54,11 @@ def upload_to_youtube(post_id: int, db_path, video_path: str, *, transport=None,
     """Upload one rendered mp4 to YouTube and write back external id + url."""
     from ..db import init_db
     conn = init_db(db_path)
-    post = conn.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()
+    post = conn.execute(
+        "SELECT p.*, c.broadcaster FROM posts p "
+        "LEFT JOIN renders r ON r.id = p.render_id "
+        "LEFT JOIN clips_raw c ON c.id = r.clip_id WHERE p.id=?", (post_id,)
+    ).fetchone()
     if not post:
         raise RuntimeError(f"post {post_id} not found")
     token = os.environ.get("YOUTUBE_ACCESS_TOKEN") or _refresh_token(

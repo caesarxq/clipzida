@@ -19,11 +19,19 @@ from clipping_tools.publish.x import (
 
 # ── Metadata ──────────────────────────────────────────────────────────
 
-def test_build_post_metadata_truncates_and_adds_hashtags():
-    md = build_post_metadata({"caption": "HE LOOKED AT ME", "angle": "funny", "hashtags": "#gta6 #clips"})
+def test_build_post_metadata_no_hashtags_adds_credit():
+    """X best practice: no hashtags. Credit line appended when broadcaster known."""
+    md = build_post_metadata({"caption": "HE LOOKED AT ME", "angle": "funny",
+                              "hashtags": "#gta6 #clips", "broadcaster": "streamerx"})
+    assert "#gta6" not in md["text"] and "#clips" not in md["text"]
     assert md["text"].startswith("HE LOOKED AT ME")
-    assert "#gta6 #clips" in md["text"]
+    assert "\n\n🎥 @streamerx" in md["text"]
     assert len(md["text"]) <= 280
+
+
+def test_build_post_metadata_no_broadcaster_no_credit():
+    md = build_post_metadata({"caption": "HE LOOKED AT ME", "broadcaster": ""})
+    assert md["text"] == "HE LOOKED AT ME"
 
 
 def test_build_post_metadata_empty_caption():

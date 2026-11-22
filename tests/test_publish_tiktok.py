@@ -36,6 +36,11 @@ def test_build_post_info_uses_brand_hashtags_and_self_only():
     assert pi["privacy_level"] == "SELF_ONLY"
 
 
+def test_build_post_info_credits_broadcaster():
+    pi = build_post_info({"caption": "HOOK TITLE", "broadcaster": "streamerx"})
+    assert "🎥 @streamerx" in pi["title"]
+
+
 def test_init_publish_posts_to_inbox_endpoint():
     db, mp4 = _seed()
     open(mp4, "wb").write(b"x" * 100)

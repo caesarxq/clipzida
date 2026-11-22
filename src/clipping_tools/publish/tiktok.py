@@ -27,6 +27,11 @@ def build_post_info(post: dict) -> dict:
     tags = "#gta6 #shorts"
     if tags not in title:
         title = f"{title[:200 - len(tags) - 1]} {tags}"
+    # Creator credit (etiquette + strengthens the licensing record)
+    broadcaster = str(post.get("broadcaster") or "").strip()
+    if broadcaster:
+        credit = f" 🎥 @{broadcaster}"
+        title = f"{title[:220 - len(credit)]}{credit}"
     return {
         "title": title,
         "description": f"{title} #gta6 #gta6clips #fyp",
@@ -91,7 +96,11 @@ def publish_to_tiktok(post_id: int, db_path, video_path: str, *, access_token: s
                       transport=None, mode: str = "inbox", poll: bool = True) -> dict:
     from ..db import init_db
     conn = init_db(db_path)
-    post = conn.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()
+    post = conn.execute(
+        "SELECT p.*, c.broadcaster FROM posts p "
+        "LEFT JOIN renders r ON r.id = p.render_id "
+        "LEFT JOIN clips_raw c ON c.id = r.clip_id WHERE p.id=?", (post_id,)
+    ).fetchone()
     if not post:
         raise RuntimeError(f"post {post_id} not found")
     token = access_token or os.environ.get("TIKTOK_ACCESS_TOKEN", "")

@@ -50,10 +50,12 @@ def _http_get(transport, url: str, **kwargs):
 
 
 def build_post_metadata(post: dict) -> dict:
-    """Build the tweet text from the post caption + hashtags."""
+    """Build the tweet text: hook + credit line. X best practice: no hashtags."""
     hook = str(post.get("caption") or "").strip() or "GTA 6 moment"
-    hashtags = str(post.get("hashtags") or "").strip()
-    text = f"{hook} {hashtags}".strip() if hashtags else hook
+    broadcaster = str(post.get("broadcaster") or "").strip()
+    text = hook
+    if broadcaster:
+        text = f"{hook}\n\n🎥 @{broadcaster}"
     # X hard limit is 280 chars; truncate from the middle if needed.
     if len(text) > 280:
         half = (280 - 3) // 2
@@ -205,7 +207,11 @@ def publish_to_x(post_id: int, db_path, video_path: str, *,
     """Upload one rendered mp4 to X and write back external id + url."""
     from ..db import init_db
     conn = init_db(db_path)
-    post = conn.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()
+    post = conn.execute(
+        "SELECT p.*, c.broadcaster FROM posts p "
+        "LEFT JOIN renders r ON r.id = p.render_id "
+        "LEFT JOIN clips_raw c ON c.id = r.clip_id WHERE p.id=?", (post_id,)
+    ).fetchone()
     if not post:
         raise RuntimeError(f"post {post_id} not found")
     _require_env()

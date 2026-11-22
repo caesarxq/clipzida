@@ -30,6 +30,18 @@ def test_upload_metadata_is_short_and_gaming():
     assert "#Shorts" in md["snippet"]["description"]
 
 
+def test_upload_metadata_credits_broadcaster_in_description():
+    md = build_upload_metadata({"caption": "HOOK TITLE", "broadcaster": "streamerx"})
+    assert "🎥 Gameplay by @streamerx" in md["snippet"]["description"]
+    # credit lives in description, not the title
+    assert "🎥" not in md["snippet"]["title"]
+
+
+def test_upload_metadata_no_broadcaster_keeps_description_clean():
+    md = build_upload_metadata({"caption": "HOOK TITLE"})
+    assert "🎥" not in md["snippet"]["description"]
+
+
 def test_upload_writes_back_external_id_and_url(monkeypatch):
     monkeypatch.setenv("YOUTUBE_ACCESS_TOKEN", "fake-token")
     db, mp4 = _seed()
